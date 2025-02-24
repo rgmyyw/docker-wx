@@ -16,18 +16,17 @@
 #ENTRYPOINT ["./main"]
 
 
-# 使用第一阶段构建 Go 应用程序
-FROM golang:alpine as build
-# Redundant, current golang images already include ca-certificates
-RUN apk --no-cache add ca-certificates upx
-WORKDIR /go/src/app
-COPY . .
-RUN CGO_ENABLED=0 go build -ldflags '-s -w -extldflags "-static"' -o /go/bin/app ./main.go \
- && upx -9 /go/bin/app
+# 使用 Alpine 作为基础镜像
+FROM alpine:latest
 
-FROM scratch
-# copy the ca-certificate.crt from the build stage
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build /go/bin/app /app
+# 安装必要的依赖（如果需要）
+RUN apk add --no-cache ca-certificates
+
+# 将编译好的 Go 二进制文件复制到镜像中
+COPY main /app/main
+
+# 设置工作目录
+WORKDIR /app
 EXPOSE 8005
-ENTRYPOINT ["/app"]
+# 设置容器启动时运行的命令
+CMD ["./main"]

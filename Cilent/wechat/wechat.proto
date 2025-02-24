@@ -1,0 +1,1088 @@
+syntax = "proto2";
+option go_package = "/;wechat";
+package wechat;
+
+message BaseRequest {
+    optional  bytes  sessionKey  = 1;
+    optional  uint32  uin  = 2;
+    optional  bytes  deviceId  = 3;
+    optional  int32  clientVersion  = 4;
+    optional  bytes  deviceType  = 5;
+    optional  uint32  scene  = 6;
+}
+
+
+message BaseRequestPlus {
+    //会话key base64字符串
+    optional bytes session_key = 1;
+    optional uint32 uin = 2;
+    optional bytes deviceId = 3;
+    optional int32 clientVersion = 4;
+    optional string osType = 5;
+    optional uint32 scene = 6;
+}
+
+
+
+message SKBuiltinString_t {
+    optional  string  string  = 1;
+}
+
+message BaseResponse {
+    optional  int32  ret  = 1;
+    optional  SKBuiltinString_t  errMsg  = 2;
+}
+
+message MMBizJsApiGetUserOpenIdRequest {
+    required BaseRequest BaseRequest = 1;
+    optional string AppId = 2;
+    optional string BusiId = 3;
+    optional string UserName = 4;
+}
+message MMBizJsApiGetUserOpenIdResponse {
+    required BaseResponse BaseResponse = 1;
+    optional string Openid = 2;
+    optional string NickName = 3;
+    optional string HeadImgUrl = 4;
+    optional string Sign = 5;
+    optional uint32 FriendRelation = 6;
+    optional string XXX_NoUnkeyedLiteral = 7;
+    optional string XXX_unrecognized = 8;
+    optional string XXX_sizecache = 9;
+}
+
+message Buffer_t {
+    required uint32 iLen = 1;
+    optional bytes Buffer = 2;
+}
+
+
+message EcdhPacket{
+    required uint32 Type = 1; //固定为1
+    required Buffer_t Key = 2;//第5步生成的publickey
+    required bytes Token = 3;//第8步结果
+    optional string Url = 4; //空串
+    optional bytes ProtobufData = 5;//第10步结果
+}
+
+message HybridDecryptResponse {
+    required Buffer_t Key = 1;//第5步生成的publickey
+    required uint32 Type = 2;
+    required bytes ProtobufData = 3;//第8步结果
+    optional bytes token = 4; //空串
+}
+
+message HybridEcdhRequest{
+    optional int32 type = 1;
+    optional Buffer_t SecECDHKey = 2;
+    optional bytes randomkeydata = 3;
+    optional bytes randomkeyextenddata = 4;
+    optional bytes encyptdata = 5;
+}
+
+message HybridEcdhResponse{
+    optional Buffer_t SecECDHKey = 1;
+    optional int32 type = 2;
+    optional bytes decryptdata = 3;
+    optional bytes randomkeyextenddata = 4;
+}
+
+
+message ECDHKey {
+    optional uint32 nid = 1;
+    optional SKBuiltinString_ key = 2;
+}
+
+
+
+message SKBuiltinString_ {
+    optional uint32 len = 1;
+    //base64字符串
+    optional bytes buffer = 2;
+}
+
+
+message ManualAuthRsaReqData {
+    optional SKBuiltinString_ randomEncryKey = 1;
+    optional ECDHKey cliPubEcdhkey = 2;
+    optional string userName = 3;
+    optional string pwd = 4;
+    optional string pwd2 = 5;
+}
+
+message WTLoginImgReqInfo {
+    optional string img_sid = 1;
+    optional string img_code = 2;
+    optional string img_encrypt_key = 3;
+    optional SKBuiltinString_ ksid = 4;
+}
+
+message WxVerifyCodeReqInfo {
+    optional string verify_signature = 1;
+    optional string verify_content = 2;
+}
+
+message BaseAuthReqInfo {
+    optional SKBuiltinString_ wt_login_req_buff = 1;
+    optional WTLoginImgReqInfo wt_login_img_req_info = 2;
+    optional WxVerifyCodeReqInfo wx_verify_code_req_info = 3;
+    optional SKBuiltinString_ clidb_encrypt_key = 4;
+    optional SKBuiltinString_ clidb_encrypt_info = 5;
+    optional uint32 auth_req_flag = 6;
+    optional string auth_ticket = 7;
+}
+
+message ManualAuthAesReqData {
+    optional BaseRequest baseRequest = 1;
+    optional BaseAuthReqInfo baseReqInfo = 2;
+    optional string imei = 3;
+    optional string softType = 4;
+    optional uint32 builtinIpseq = 5;
+    optional string clientSeqId = 6;
+    optional string signature = 7;
+    optional string deviceName = 8;
+    optional string deviceType = 9;
+    optional string language = 10;
+    optional string timeZone = 11;
+    optional int32 channel = 13;
+    optional uint32 timeStamp = 14;
+    optional string deviceBrand = 15;
+    optional string deviceModel = 16;
+    optional string ostype = 17;
+    optional string realCountry = 18;
+    optional string bundleId = 19;
+    optional string adSource = 20;
+    optional string iphoneVer = 21;
+    optional uint32 inputType = 22;
+    optional SKBuiltinString_ clientCheckData = 23;
+    optional SKBuiltinString_ extSpamInfo = 24;
+}
+
+message TrustSoftData{
+    optional string SoftConfig=1;
+    optional bytes SoftData=2;
+}
+
+message TrustResponseData{
+    optional TrustSoftData SoftData=2;
+    optional string DeviceToken=3;
+    optional uint64 Timestamp=4;
+}
+
+message TrustResp{
+    required BaseResponse BaseResponse = 1;
+    optional TrustResponseData TrustResponseData=2;
+}
+
+message AutoAuthKey {
+    required Buffer_t EncryptKey = 1;
+    required Buffer_t Key = 2;
+}
+
+message AutoAuthRsaReqData {
+    optional SKBuiltinString_ aes_encrypt_key = 2;
+    optional ECDHKey pubEcdhKey = 3;
+}
+
+message AutoAuthAesReqData {
+    optional BaseRequestPlus base_request = 1;
+    optional BaseAuthReqInfo base_req_info = 2;
+    optional SKBuiltinString_ auto_auth_key = 3;
+    optional string imei = 4;
+    optional string soft_type = 5;
+    optional uint32 builtin_ip_seq = 6;
+    optional string client_seq_id = 7;
+    optional string signature = 8;
+    optional string device_name = 9;
+    optional string deviceType = 10;
+    optional string language = 11;
+    optional string time_zone = 12;
+    optional uint32 channel = 13;
+    optional SKBuiltinString_ clientCheckData = 14;
+    optional SKBuiltinString_ extSpamInfo = 15;
+}
+
+message AutoAuthRequest {
+    optional AutoAuthRsaReqData rsa_req_data = 1;
+    optional AutoAuthAesReqData aes_req_data = 2;
+}
+
+
+message WCExtInfoNew {
+    optional Buffer_t Wcstf = 1 ;
+    optional Buffer_t Wcste = 2 ;
+    optional Buffer_t CcData = 3 ;
+    optional Buffer_t UserAttrInfo = 4 ;
+    optional Buffer_t AcgiDeviceInfo = 5 ;
+    optional Buffer_t AcgiTuring = 6 ;
+    optional Buffer_t DeviceToken = 7 ;
+    optional Buffer_t BehaviorId = 8 ;
+    optional Buffer_t IosturingHuman = 101 ;
+    optional Buffer_t IosturingOwner = 102 ;
+}
+
+message FileInfo {
+    optional string Filepath = 1;
+    optional string Fileuuid = 2;
+}
+
+message SpamDataBody {
+    required int32 UnKnown1 = 1;
+    required uint32 TimeStamp = 2;
+    required int32 KeyHash = 3;
+    required string Yes1 = 11;
+    required string Yes2 = 12;
+    required string IosVersion = 13;
+    required string DeviceType = 14;
+    required int32 UnKnown2  = 15;
+    required string IdentifierForVendor = 16;
+    required string AdvertisingIdentifier  = 17;
+    required string Carrier = 18;
+    required int32 BatteryInfo = 19;
+    required string NetworkName = 20;
+    required int32 NetType = 21;
+    required string AppBundleId = 22;
+    required string DeviceName = 23;
+    required string UserName = 24;
+    required int64 Unknown3 = 25;
+    required int64 Unknown4 = 26;
+    required int32 Unknown5 = 27;
+    required int32 Unknown6 = 28;
+    required string Lang = 29;
+    required string Country = 30;
+    required int32 Unknown7 = 31;
+    required string DocumentDir = 32;
+    required int32 Unknown8 = 33;
+    required int32 Unknown9 = 34;
+    required string HeadMD5 = 35;
+    required string AppUUID = 36;
+    required string SyslogUUID = 37;
+    required string WifiName = 38;
+    required string WifiMac = 39;
+    required string AppName  = 40;
+    optional string SshPath = 41;
+    optional string TempTest = 42;
+    optional string DevMD5 = 43;
+    optional string DevUser = 44;
+    optional string DevPrefix = 45;
+    repeated FileInfo AppFileInfo = 46;
+    required string Unknown12 = 47;
+    required int32 IsModify = 50;
+    required string ModifyMD5 = 51;
+    required int64 RqtHash = 52;
+    required int32 Unknown13 = 53;
+    required int32 Unknown14 = 54;
+    required string Ssid = 55;
+    required int32  Unknown15 = 56;
+    required string Bssid = 57;
+    required int32 IsJail = 58;
+    optional string Seid = 59;
+    optional int32 Unknown16 = 60;
+    optional int32 Unknown17 = 61;
+    optional int32 Unknown18 = 62;
+    optional int32 WifiOn = 63;
+    optional int32 BluethOn = 64;
+    optional string BluethName = 65;
+    optional string BluethMac = 66;
+    optional int32 Unknown19 = 67;
+    optional int32 Unknown20 = 68;
+    optional int32 Unknown26 = 69;
+    optional int32 HasSim = 70;
+    optional int32 UsbState = 71;
+    optional int32  Unknown27 = 72;
+    optional int32 Unknown28 = 73;
+    optional string Sign = 74;
+    optional uint32 PackageFlag = 75;
+    optional uint32 AccessFlag = 76;
+    optional string Imei = 77;
+    optional string DevSerial = 78;
+    optional uint32 Unknown29 = 79;
+    optional uint32 Unknown30 = 80;
+    optional uint32 Unknown31 = 81;
+    optional uint32 Unknown32 = 82;
+    optional uint32 AppNum = 83;
+    optional string Totcapacity = 84;
+    optional string Avacapacity = 85;
+    optional uint32 Unknown33 = 86;
+    optional uint32 Unknown34 = 87;
+    optional uint32 Unknown35 = 88;
+    optional int32 Unknown103 = 89;
+    optional int32 Unknown104 = 90;
+    optional int32 Unknown105 = 91;
+    optional uint32 Unknown106 = 92;
+    optional int32 Unknown107 = 93;
+    optional int32 Unknown108 = 94;
+    optional int32 Unknown109 = 95;
+    optional int32 Unknown110 = 96;
+    optional int32 Unknown111 = 97;
+    optional uint32 Unknown112 = 98;
+
+}
+
+message NewClientCheckData {
+    optional int64 C32cData = 1;
+    optional int64 TimeStamp = 2;
+    optional bytes DataBody = 3;
+}
+
+message DeviceRunningInfoNew {
+    required bytes Version = 1;
+    required uint32 Type = 2;
+    required bytes EncryptData = 3;
+    required uint32 Timestamp = 4;
+    required uint32 Unknown5 = 5;
+    required uint32 Unknown6 = 6;
+}
+
+message WCSTF {
+    required uint64 StartTime = 1;
+    required uint64 CheckTime = 2;
+    required uint32 Count = 3;
+    repeated uint64 EndTime = 4;
+}
+
+
+message WCSTE {
+    required string CheckId = 1;
+    required uint32 StartTime = 2;
+    required uint32 CheckTime = 3;
+    required uint32 Count1 = 4;
+    required uint32 Count2 = 5;
+    required uint32 Count3 = 6;
+    required uint64 Const1 = 7;
+    required uint64 Const2 = 8;
+    required uint64 Const3 = 9;
+    required uint64 Const4 = 10;
+    required uint64 Const5 = 11;
+    required uint64 Const6 = 12;
+}
+
+
+message SaeInfo {
+    optional bytes type = 1;
+    optional bytes iv = 2;
+    optional uint32 len = 3;
+    optional bytes unknowValue9 = 9;
+    optional bytes tableKey = 10;
+    optional bytes unknowValue11 = 11;
+    optional bytes tableValue = 12;
+    optional bytes unknowValue18 = 18;
+}
+
+message TenPayRequest {
+    optional BaseRequest baseRequest = 1;
+    optional uint32 cgiCmd = 2;
+    optional uint32 outPutType = 3;
+    optional SKBuiltinString_ reqText = 4;
+    optional SKBuiltinString_ reqTextWx = 5;
+    optional string sign = 6;
+    optional string crtNo = 7;
+}
+
+
+message SKBuiltinBuffer_t {
+    optional  uint32  iLen  = 1;
+    optional  bytes  buffer  = 2;
+}
+
+message UploadAppAttachRequest {
+    optional BaseRequest BaseRequest = 1;
+    optional string appId = 2;
+    optional uint32 sdkVersion = 3;
+    optional string clientAppDataId = 4;
+    optional string userName = 5;
+    optional uint32 totalLen = 6;
+    optional uint32 startPos = 7;
+    optional uint32 dataLen = 8;
+    optional SKBuiltinBuffer_t data = 9;
+    optional uint32 type = 10;
+    optional string md5 = 11;
+}
+
+
+message UploadAppAttachResponse {
+    optional BaseResponse BaseResponse = 1;
+    optional string appId = 2;
+    optional string mediaId = 3;
+    optional string clientAppDataId = 4;
+    optional string userName = 5;
+    optional uint32 totalLen = 6;
+    optional uint32 startPos = 7;
+    optional uint32 dataLen = 8;
+    optional uint64 createTime = 9;
+}
+
+
+message DownloadVoiceRequest {
+    optional uint64 msgId = 1;
+    optional uint32 offset = 2;
+    optional uint32 length = 3;
+    optional string clientMsgId = 4;
+    optional BaseRequest baseRequest = 5;
+    optional uint64 newMsgId = 6;
+    optional string chatRoomName = 7;
+    optional int64 masterBufId = 8;
+}
+
+message DownloadVoiceResponse {
+    optional uint32 msgId = 1;
+    optional uint32 offset = 2;
+    optional uint32 length = 3;
+    optional uint32 voiceLength = 5;
+    optional string clientMsgId = 6;
+    optional SKBuiltinString_ data = 7;
+    optional uint32 endFlag = 8;
+    optional BaseResponse baseResponse = 9;
+    optional uint32 cancelFlag = 10;
+    optional uint64 newMsgId = 11;
+}
+
+message ClientContextInfo {
+    optional  string ContextId = 1;
+    optional  string ClickTabContextId = 2;
+    optional  string ClientReportBuff = 3;
+}
+
+//视频号
+message FinderBaseRequest {
+    optional  int32 userver = 1;
+    optional  int32 scene = 2;
+    optional  bytes extSpamInfo = 3;
+    optional  uint32 ExptFla = 4;
+    optional  ClientContextInfo CtxInfo = 5;
+    optional  uint64 times=6;
+}
+
+
+message FinderPwd {
+    optional  uint64 FbrId = 1;
+    optional  string FbrKey = 2;
+    optional  uint64 FbrTime = 3;
+    optional  uint64 T = 4;
+    optional  uint64 G = 5;
+}
+
+message FinderBaseRequestPlus {
+    optional  int32 userver = 1;
+    optional  int32 scene = 2;
+    optional  bytes extSpamInfo = 3;
+    optional  uint32 ExptFla = 4;
+    optional  ClientContextInfo CtxInfo = 5;
+    optional  uint64 times=6;
+    optional  uint64 FbrV7 = 7;
+    optional  FinderPwd Pwd = 8;
+}
+
+
+message FinderTxRequestPlus{
+    optional int32  Userver=1;
+    optional int32 Scene=2;
+    optional bytes ExtSpamInfo =3;
+    optional int32 T  =4;
+    optional FinderZd G =5;
+    optional int64 Tg =6;
+}
+
+message FinderZd{
+    optional string G1=1;
+    optional string G2=2;
+    optional string G3=3;
+}
+
+message FinderFollowRequestPlus{
+    optional string FinderUsername=2;
+    optional int32 OpType=3;
+    optional uint64 RefObjectId=4;
+    optional string PosterUsername=5;
+    optional FinderTxRequestPlus FinderReq=7;
+    optional string Cook=8;
+    optional int32 EnterType=9;
+}
+
+message FinderCommentRequest {
+    optional BaseRequest BaseRequest = 1;
+    optional string Username = 2;
+    optional uint64 Objectid = 3;
+    optional string Content = 4;
+    optional uint64 CommentId = 5;
+    optional uint64 ReplyCommentId = 6;
+    optional string ReplyUsername = 7;
+    optional uint32 Optype = 8;
+    optional string Clientid = 9;
+    optional uint64 RootCommentId = 10;
+    optional uint32 Scene = 11;
+    optional string ObjectNonceId = 12;
+    optional FinderBaseRequest FinderBasereq = 13;
+    optional string SessionBuffer = 14;
+}
+
+message FinderMediaSpec {
+    optional  string fileFormat = 1;
+    optional  int32 firstLoadBytes = 2;
+    optional  int32 bitRate = 3;
+    optional  string codingFormat = 4;
+}
+
+message FinderMedia {
+    optional  string Url = 1;
+    optional  string ThumbUrl = 2;
+    optional  int32 MediaType = 3;
+    optional  int32 VideoPlayLen = 4;
+    optional  float Width = 5;
+    optional  float Height = 6;
+    optional  string Md5Sum = 7;
+    optional  int32 FileSize = 8;
+    optional  int32 Bitrate = 9;
+    repeated  FinderMediaSpec Spec = 10;
+}
+
+message FinderMediaExtra {
+    optional  string text = 1;
+}
+
+message FinderLocation {
+    optional  float longitude = 1;
+    optional  float latitude = 2;
+    optional  string city = 3;
+    optional  string poiName = 4;
+    optional  string poiAddress = 5;
+    optional  string poiClassifyId = 6;
+    optional  int32 poiClassifyType = 7;
+}
+
+message FinderExtendedReading {
+    optional  string link = 1;
+    optional  string title = 2;
+}
+
+message FinderTopic {
+    optional  string finderTopicInfo = 1;
+}
+
+
+message FinderObjectDesc {
+    optional  string description = 1;
+    repeated  FinderMedia media = 2; //疑似PB不对
+    optional  int32 mediaType = 3;
+    optional  FinderMediaExtra extra = 4;
+    optional  FinderLocation location = 5;
+    optional  FinderExtendedReading extReading = 6;
+    optional  FinderTopic topic = 7;
+}
+
+
+message FinderCommentInfo {
+    optional  string username = 1;
+    optional  string nickname = 2;
+    optional  string content = 3;
+    optional  uint32 commentId = 4;
+    optional  uint32 replyCommentId = 5;
+    optional  int32 deleteFlag = 6;
+    optional  string headUrl = 7;
+    repeated  string levelTwoComment = 8; //未找到相关PB
+    optional  uint32 createtime = 9;
+    optional  string replyNickname = 10;
+    optional  string displayidDiscarded = 11;
+    optional  int32 likeFlag = 12;
+    optional  int32 likeCount = 13;
+    optional  uint32 displayid = 14;
+    optional  int32 expandCommentCount = 15;
+    optional  bytes lastBuffer = 16;
+    optional  int32 continueFlag = 17;
+    optional  int32 displayFlag = 18;
+    optional  int32 blacklistFlag = 19;
+    optional  string replyContent = 20;
+    optional  string replyUsername = 21;
+    optional  string clientId = 22;
+    optional  int32 upContinueFlag = 23;
+}
+
+message FinderAuthInfo {
+    /* optional  string realName = 1;
+     optional  int32 authIconType = 2;
+     optional  string authProfession = 3;
+     optional  FinderContact authGuarantor = 4;
+     optional  string detailLink = 5;
+     optional  string appName = 6;*/
+    optional string v1=1;
+    optional  int32 authIconType = 2;
+    optional  string realName = 3;
+    optional  string photo = 7;
+    optional  int32 v8 = 8;
+    optional  int32 v9 = 9;
+}
+
+message FinderContactExtInfo {
+    optional  string country = 1;
+    optional  string province = 2;
+    optional  string city = 3;
+    optional  int32 sex = 4;
+    optional  int32 birthYear = 5;
+    optional  int32 birthMonth = 6;
+    optional  int32 birthDay = 7;
+}
+
+
+message FinderContact {
+    optional  string username = 1;
+    optional  string nickname = 2;
+    optional  string headUrl = 3;
+    optional  uint64 seq = 4;
+    optional  string signature = 5;
+    optional  int32 followFlag = 6;
+    optional  int32 followTime = 7;
+    optional  FinderAuthInfo authInfo = 8;
+    optional  string coverImgUrl = 9;
+    optional  int32 spamStatus = 10;
+    optional  int32 extFlag = 11;
+    optional  FinderContactExtInfo extInfo = 12;
+    optional  int32 originalFlag = 13;
+}
+
+message ByNumber{
+    optional uint64 byNum=1;
+}
+message ByTabMsg{
+    optional uint64 byNum=1;
+    optional string byTabTitle=2;
+}
+
+message FinderObjDetails{
+    optional uint64 detId=1;
+    optional uint64 det2=2;
+    optional uint64 det3=3;
+    optional string videoUrl=4;
+    optional uint64 timesTime=5;
+    optional uint64 likeNumber=6;
+    optional uint64 nu7=7;
+    optional ByNumber byNumber=10;
+    optional uint64 lookNumber=11;
+    optional uint64 nu13=13;
+    optional ByTabMsg tab=16;
+}
+
+//疑似不对
+message FinderRecommendInfo {
+    optional  string tid = 1;
+    optional  uint32 recommendType = 2;
+    optional  string recommendReason = 3;
+    optional  uint32 orgRecommendType = 4;
+    optional  uint32 lastInsertedRowID = 5;
+    optional  bool isAutoIncrement = 6;
+}
+
+message FinderObject {
+    optional  uint64 id = 1;
+    optional  string finderObjectID = 100;
+    optional  string nickname = 2;
+    optional  string username = 3;
+    optional  FinderObjectDesc objectDesc = 4;
+    optional  int32 createtime = 5;
+    optional  int32 likeFlag = 6;
+    repeated  bytes likeList = 7; //未找到相关PB
+    repeated  FinderCommentInfo commentList = 8;
+    optional  int32 forwardCount = 9;
+    optional  FinderContact contact = 10;
+    optional  string displayidDiscarded = 11;
+    repeated  FinderRecommendInfo recommenderList = 12; //疑似PB不对
+    optional  uint64 displayid = 13;
+    optional  int32 likeCount = 14;
+    optional  int32 commentCount = 15;
+    optional  string recommendReason = 16;
+    optional  int32 readCount = 17;
+    optional  int32 deletetime = 18;
+    optional  int32 commentClose = 19;
+    optional  uint32 refObjectFlag = 20;
+    optional  uint32 refObjectid = 21;
+    optional  FinderContact refObjectContact = 22;
+    optional  int32 recommendType = 23;
+    optional  int32 friendLikeCount = 24;
+    optional  string objectNonceId = 25;
+    optional  string refObjectNonceId = 26;
+    optional  int32 objectStatus = 27;
+    optional  string sendShareFavWording = 28;
+    optional  int32 originalFlag = 29;
+    optional  int32 secondaryShowFlag = 30;
+    optional  string tipsWording = 31;
+    optional  int32 orgRecommendType = 32;
+    optional string enKey=34;
+    optional FinderObjDetails finderObjDetails=37;
+    optional uint64 unk38=38;
+    optional uint64 unk39=39;
+    optional uint64 unk43=43;
+    optional uint64 unk44=44;
+    optional uint64 unk57=57;
+}
+
+
+message FinderCommentResponse {
+    optional BaseResponse BaseResponse = 1;
+    optional uint64 CommentId = 2;
+    optional string Clientid = 3;
+    optional FinderObject Object = 4;
+    repeated FinderCommentInfo ExposedComment = 5;
+}
+
+
+message FinderFollowRequest {
+    optional BaseRequest BaseRequest = 1;
+    optional string PosterUsername = 2;
+    optional uint32 Optype = 3;
+    optional uint32 RefObjectid = 4;
+    optional string FinderUsername = 5;
+    optional string RefObjectNonceId = 6;
+    optional FinderBaseRequest FinderBasereq = 7;
+    optional string SessionBuffer = 8;
+    optional uint32 EnterType = 9;
+}
+
+
+message FinderFollowResponse {
+    optional BaseResponse BaseResponse = 1;
+}
+
+message FinderGetCommentDetailRequest {
+    optional BaseRequest BaseRequest = 1;
+    optional uint64 Objectid = 2;
+    optional uint64 MaxCommentId = 3;
+    optional uint32 NeedObject = 4;
+    optional bytes LastBuffer = 5;
+    optional uint64 RootCommentId = 6;
+    optional string FinderUsername = 7;
+    optional uint64 RefCommentId = 8;
+    optional uint32 Scene = 9;
+    optional uint32 Direction = 10;
+    optional string EncryptedObjectid = 11;
+    optional string ObjectNonceId = 12;
+    optional FinderBaseRequest FinderBasereq = 13;
+    optional uint32 IdentityScene = 14;
+    optional uint32 scene15=15;
+    optional string sceneAll16=16;
+}
+
+message FinderGetCommentDetailResponse {
+    optional BaseResponse BaseResponse = 1;
+    repeated FinderCommentInfo CommentInfo = 2;
+    optional FinderObject Object = 3;
+    optional bytes LastBuffer = 4;
+    optional uint32 CommentCount = 5;
+    optional uint32 UpContinueFlag = 6;
+    optional uint32 DownContinueFlag = 7;
+    optional uint32 NextCheckObjectStatus = 8;
+    optional uint32 SecondaryShowFlag = 9;
+}
+
+message FinderLikeRequest {
+    optional BaseRequest BaseRequest = 1;
+    optional uint64 Objectid = 2;
+    optional uint64 Commentid = 3;
+    optional uint64 Optype = 4;
+    optional uint64 Likeid = 5;
+    optional uint32 CurLikeCount = 6;
+    optional string FinderUsername = 7;
+    optional uint32 Scene = 8;
+    optional string ObjectNonceId = 9;
+    optional FinderBaseRequest FinderBasereq = 10;
+    optional string SessionBuffer = 11;
+    optional string LikeUsername = 12;
+}
+
+message FinderLikeResponse {
+    optional BaseResponse BaseResponse = 1;
+}
+
+
+message FinderSearchRequest {
+    optional BaseRequest BaseRequest = 1;
+    optional string Query = 2;
+    optional uint32 Offset =3;
+    optional bytes LastBuff = 4;
+    optional uint32 Scene = 5;
+    optional string RequestId = 6;
+    optional FinderBaseRequest FinderBasereq = 7;
+}
+
+
+
+
+
+message FinderJoinLiveReq {
+    optional BaseRequest BaseRequest = 1;
+    optional FinderBaseRequestPlus FinderBasereq = 2;
+    optional uint64 Dt1=3;
+    optional string Jlr = 4;
+    optional uint64 JlrId=5;
+    optional string FinderUser = 6;
+    optional uint32 Sce = 7;
+    optional string Jlr8 = 8;
+    optional string ObjectNonceId = 9;
+    optional string Enk = 10;
+    optional uint32 Jlr11 =11 ;
+    optional string Jlr12 = 12;
+}
+
+message FinderSearchInfo {
+    optional FinderContact Contact = 1;
+    optional string HighlightNickname = 2;
+    optional string HighlightSignature = 3;
+    optional uint32 FansCount = 4;
+    optional uint32 FriendFollowCount = 5;
+    optional string HighlightProfession = 6;
+}
+
+message FinderSearchResponse {
+    optional BaseResponse BaseResponse = 1;
+    repeated FinderSearchInfo InfoList = 2;
+    optional uint32 Offset = 3;
+    optional uint32 ContinueFlag = 4;
+    repeated FinderObject ObjectList = 5;
+    optional bytes LastBuff = 6;
+    optional string RequsetId = 7;
+    repeated FinderTopic TopicInfoList = 8;
+    optional uint32 ObjectContinueFlag = 9;
+    optional uint32 TopicContinueFlag = 10;
+}
+
+message FinderUserPageRequest {
+    optional  BaseRequest baseRequest = 1;
+    optional  string username = 2;
+    optional  uint64 maxId = 3;
+    optional  string firstPageMd5 = 4;
+    optional  string finderUsername = 5;
+    optional  int32 needFansCount = 6;
+    optional  FinderBaseRequest finderBasereq = 7;
+    optional  bytes lastBuffer = 8;
+}
+
+message FinderNicknameVerifyInfo {
+    optional  string verifyPrefix = 1;
+    optional  string bannerWording = 2;
+    optional  string verifyLink = 3;
+    optional  string appname = 4;
+    optional  string verifyNickname = 5;
+    optional  string headImgUrl = 6;
+    optional  int32 errScene = 7;
+}
+
+message FinderUserInfo {
+    optional  string coverImgUrl = 1;
+    optional  int32 authIconType = 2;
+    optional  string authProfession = 3;
+    optional  FinderAuthInfo authInfo = 4;
+}
+
+message ListTab{
+    optional string val=1;
+    optional uint64 key=2;
+}
+
+message FinderUserPageResponse {
+    optional  BaseResponse baseResponse = 1;
+    repeated  FinderObject object = 2;
+    optional  string firstPageMd5 = 3;
+    optional  FinderUserInfo finderUserInfo = 4;
+    optional  FinderContact contact = 5;
+    optional  int32 feedsCount = 6;
+    optional  int32 continueFlag = 7;
+    optional  FinderNicknameVerifyInfo verifyInfo = 8;
+    optional  int32 fansCount = 9;
+    optional  bytes lastBuffer = 10;
+    optional  int32 friendFollowCount = 11;
+    repeated  bytes userTags = 12; //未找到相关PB
+    optional  int32 originalEnctranceFlag = 13;
+    repeated  ListTab listTab = 20;
+    optional  int32 num=21;
+}
+
+message MarkUnreadObjectList{
+    optional uint64 v1=1;
+    optional uint64 sec2=2;
+    optional uint64 v3=3;
+    optional uint64 v4=4;
+    optional string eyKey=5;
+    optional uint64 v6=6;
+}
+
+
+message FinderStreamRequest{
+    optional BaseRequest request=1;
+    optional string finderUsername=3;
+    optional uint64 pullType=5;
+    optional FinderBaseRequest finderBaseRequest=6;
+    optional uint64 latitude=7;
+    optional uint64 longitude=8;
+    optional MarkUnreadObjectList markUnreadObjectList=11;
+    optional uint64 specialRequestScene=12;
+    optional uint64 tabTipsObjectId=13;
+    optional uint64 v14=14;
+    optional string v15=15;
+    optional uint64 v17=17;
+    optional string v21=21;
+    optional string v22=22;
+    optional string finderEnt=24;
+}
+
+message ByBing{
+    optional string ret=2;
+}
+
+message BaseRsp{
+    optional uint64 code=1;
+    optional ByBing ret=2;
+}
+
+message FinderStreamResponse{
+    optional BaseRsp baseRsp=1;
+    repeated FinderObject finderObject=2;
+    optional bytes LastBuffer = 3;
+    optional uint64 rsp4=4;
+    optional uint64 rsp5=5;
+    optional bytes text=6;
+}
+
+
+message FinderSearchGetHotWordListRequest{
+    optional BaseRequest baseRequest = 1;
+    optional FinderBaseRequest finderBaseRequest=2;
+}
+
+message Resp{
+    optional int32 ret=1;
+}
+
+message FinderSearchIdList{
+    optional uint64 id=1;
+    optional uint32 number=2;
+}
+
+message FinderSearchGetHotWordList{
+    optional string  title=1;
+    optional int32   number=2;
+    optional FinderSearchIdList  data=5;
+}
+
+message FinderSearchGetHotWordListResponse{
+    optional  Resp baseResponse = 1;
+    repeated FinderSearchGetHotWordList finderSearchGetHotWordList=2;
+}
+
+message FinderGetTopicListRequest{
+    optional BaseRequest BaseRequest = 1;
+    optional FinderBaseRequest finderBaseRequest=2;
+    optional bytes lastBuffer=3;
+    optional uint64  topicType=4;
+    optional string topic=5;
+    optional uint64 latitude=6;
+    optional uint64 longitude=7;
+    optional uint64 fromObjectId=8;
+    optional uint64 v9=9;
+    optional uint64 v12=12;
+    optional uint64 v14=14;
+    optional string v15=15;
+    optional string v16=16;
+    optional uint64 v17=17;
+}
+
+message FinderGetTopicListResponse{
+    repeated FinderObject finderObject=2;
+    optional bytes LastBuffer=3;
+    optional uint64 rspV4=4;
+    optional uint64 rspV5=5;
+    optional bytes rspV6=6;
+}
+
+
+message FinderGetMsgSessionIdRequest{
+    optional uint64 myAccountType=2;
+    optional string finderUsername=3;
+    optional FinderBaseRequest finderBaseRequest=4;
+}
+
+message RespV{
+    optional int32 ret=1;
+}
+
+message FinderMsgSessionInfo{
+    optional string finderUsername=1;
+    optional string sessionId=2;
+    optional uint64 rejectMsg=3;
+    optional uint64 enableAction=4;
+}
+
+message FinderGetMsgSessionIdResponse{
+    optional RespV resp=1;
+    optional string finderMsg=2;
+    optional uint64 enableAction=3;
+    optional string finderUsername=4;
+    optional FinderMsgSessionInfo finderMsgSessionInfo=5;
+}
+
+message SKBuiltinString_ts {
+    optional  string  string  = 1;
+}
+
+message BypMsgImgPack{
+    optional string bypV1=1;
+    optional string fromUsername=2;
+    optional string bypV3=3;
+    optional uint64 bypV4=4;
+    optional uint64 bypV5=5;
+    optional uint64 bypV6=6;
+    optional uint64 bypV7=7;
+    optional uint64 bypV8=8;
+    optional string bypV9=9;
+    optional uint64 bypV15=15;
+}
+
+message BypMsgVideoPack{
+    optional string bypVideoV1=1;
+    optional string bypVideoV2=2;
+    optional uint64 bypVideoV3=3;
+    optional uint64 bypVideoV4=4;
+    optional uint64 bypVideoV5=5;
+    optional string bypVideoV6=6;
+    optional string bypVideoV7=7;
+    optional uint64 bypVideoV8=8;
+    optional uint64 bypVideoV9=9;
+    optional uint64 bypVideoV10=10;
+    optional string bypVideoV11=11;
+    optional string bypVideoV12=12;
+    optional string bypVideoV13=13;
+}
+
+message BypMsgPack{
+    optional uint64 msgType=1;
+    optional string fromUsername=2;
+    optional string toUsername=3;
+    optional string msgSessionId=4;
+    optional string msgSource=5;
+    optional string v6=6;
+    optional string sessionId=7;
+    optional SKBuiltinString_ts sk=101;
+    optional BypMsgImgPack skImg=102;
+    optional BypMsgVideoPack skVideo=103;
+}
+
+message BypSendRequest{
+    optional BaseRequest baseRequest= 1;
+    optional uint64 bizType=2;
+    optional BypMsgPack bypMsgPack=3;
+}
+
+
+message BypSendResp{
+    optional bytes response=1;
+    optional bytes msgId=2;
+}
+
+message FinderJoinLiveRespInfo{
+    optional int32  T1List=1;
+}
+
+message FinderJoinLiveResp{
+    optional FinderJoinLiveRespInfo T1=1;
+    optional string T=2;
+}
+
+
+

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="b263149f-9c0a-46c7-b54e-2e213a143a8f" name="188tech">
+        <fileTransfer rootFolder="/root" accessType="SFTP" host="120.26.221.81" port="22" sshConfigId="76234cab-10ef-4506-8d10-c96d37101b10" sshConfig="root@120.26.221.81:22 key" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="078357fd-8f99-4803-b753-f5a7507a9869" name="156">
+        <fileTransfer rootFolder="/root" accessType="SFTP" host="156.241.132.160" port="22" sshConfigId="aca407d8-447c-4caa-80bd-da5a8364edda" sshConfig="root@156.241.132.160:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="6715bd92-67c1-4577-8243-3cd1ff2d9f2e" name="docker-ssh" url="http://127.0.0.1:8087">
+        <fileTransfer accessType="SFTP" host="127.0.0.1" port="8204" sshConfigId="cfca62db-37d1-49c2-a976-50d8a95930be" sshConfig="root@127.0.0.1:8204 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

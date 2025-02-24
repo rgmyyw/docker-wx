@@ -16,16 +16,28 @@
 #ENTRYPOINT ["./main"]
 
 
-# 使用 Alpine 作为基础镜像
-FROM alpine:latest
+# 使用第一阶段构建 Go 应用程序
+FROM golang:1.20-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
 
-# 复制 wx 文件到容器中
-COPY wx /app/
+# 复制 Go 源代码文件到容器中
+COPY . /app
 
-# 替换 ./wx 权限为可执行（如果需要）
+# 构建可执行文件
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o wx
+
+# 使用第二阶段构建精简镜像
+FROM alpine:3.16
+
+# 设置工作目录
+WORKDIR /app
+
+# 将第一阶段生成的可执行文件和静态文件复制到第二阶段
+COPY --from=builder /app/wx /app/
+
+# 替换 ./wx 权限为可执行
 RUN chmod +x /app/wx
 
 # 暴露 8005 端口

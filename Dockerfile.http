@@ -23,10 +23,10 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 
 # 将编译好的 Go 二进制文件复制到镜像中
-COPY main /app/main
+COPY main /main
 
 # 设置工作目录
-WORKDIR /app
+
 EXPOSE 8005
 # 设置容器启动时运行的命令
 CMD ["./main"]

@@ -10,20 +10,19 @@
 #RUN go build main.go
 
 #RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+# 构建阶段
 FROM golang:1.20 as builder
 LABEL maintainer="Jacky123"
 
 WORKDIR /usr/wic-go
 COPY . .
-RUN go env -w GO111MODULE=on
-RUN go env -w GOPROXY=https://proxy.golang.org,direct
+RUN go env -w GOPROXY=https://goproxy.cn,direct
 RUN go mod download
-RUN go build main.go
+RUN go build -o main .
 
+# 运行阶段
 FROM alpine:latest
 WORKDIR /usr/wic-go
 COPY --from=builder /usr/wic-go/main .
-
 EXPOSE 8005
-# 启动时执行go
 ENTRYPOINT ["./main"]

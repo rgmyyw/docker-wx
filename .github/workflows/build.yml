@@ -32,7 +32,18 @@ jobs:
       - name: Build Go binary
         run: |
           GOOS=linux GOARCH=amd64 go build -o main ./main.go
-
+          chmod +x main
+      - name: Configure Git author
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "action"
+      - name: Save file to repository
+        run: |
+          git status
+          ls
+          git add . -f
+          git commit -m "Add file"
+          git push
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

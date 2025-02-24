@@ -17,13 +17,17 @@
 
 
 # 使用第一阶段构建 Go 应用程序
-FROM golang:alpine AS builder
-
-WORKDIR /build
-
+FROM golang:alpine as build
+# Redundant, current golang images already include ca-certificates
+RUN apk --no-cache add ca-certificates upx
+WORKDIR /go/src/app
 COPY . .
+RUN CGO_ENABLED=0 go build -ldflags '-s -w -extldflags "-static"' -o /go/bin/app ./main.go \
+ && upx -9 /go/bin/app
 
-RUN go build -o test main.go
+FROM scratch
+# copy the ca-certificate.crt from the build stage
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build /go/bin/app /app
 EXPOSE 8005
-CMD ["./test"]
-
+ENTRYPOINT ["/app"]

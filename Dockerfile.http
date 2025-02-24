@@ -22,8 +22,11 @@ FROM golang:1.20-alpine AS builder
 # 设置工作目录
 WORKDIR /app
 
-# 复制 Go 源代码文件到容器中
+# 复制整个项目文件夹（包括 Go 模块文件）
 COPY . /app
+
+# 下载依赖
+RUN go mod download
 
 # 构建可执行文件
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o wx
@@ -36,6 +39,7 @@ WORKDIR /app
 
 # 将第一阶段生成的可执行文件和静态文件复制到第二阶段
 COPY --from=builder /app/wx /app/
+COPY --from=builder /app/static/ /app/static/  # 如果有静态文件
 
 # 替换 ./wx 权限为可执行
 RUN chmod +x /app/wx

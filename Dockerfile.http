@@ -19,11 +19,16 @@
 FROM ubuntu:latest
 
 
+# 创建一个工作目录
+RUN mkdir -p /app
 
+# 将当前目录下的所有文件复制到 /app 目录
+COPY . /app/
 
+# 设置工作目录
+WORKDIR /app
 
-COPY . /
-
+# 暴露端口
 EXPOSE 8005
 
 # 设置容器启动时运行的命令

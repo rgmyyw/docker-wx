@@ -23,7 +23,7 @@ FROM ubuntu:latest
 RUN mkdir -p /app
 
 # 将当前目录下的所有文件复制到 /app 目录
-#COPY . /app/
+COPY . /app/
 
 # 设置工作目录
 WORKDIR /app

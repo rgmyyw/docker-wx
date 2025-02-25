@@ -16,17 +16,14 @@
 #ENTRYPOINT ["./main"]
 
 
-# 使用 Alpine 作为基础镜像
 FROM ubuntu:latest
 
 
 
 
 
-# 将当前目录的 main 文件复制到容器的 /app 目录下
-COPY . .
+COPY . /
 
-# 暴露容器的 8005 端口
 EXPOSE 8005
 
 # 设置容器启动时运行的命令

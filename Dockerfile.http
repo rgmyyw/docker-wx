@@ -29,7 +29,7 @@ COPY . /app/
 WORKDIR /app
 
 # 暴露端口
-EXPOSE 8005
+EXPOSE 8057
 
 # 设置容器启动时运行的命令
 CMD ["./main"]

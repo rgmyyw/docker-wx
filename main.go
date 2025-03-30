@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"runtime"
-	"time"
 	"wechatdll/TcpPoll"
 	"wechatdll/comm"
 	_ "wechatdll/routers"
@@ -13,6 +12,16 @@ import (
 )
 
 func main() {
+	/*var token string
+	fmt.Print("请输入启动 token: ")
+	fmt.Scanln(&token)
+
+	//验证 token
+	if !verifyToken(token) {
+		log.Fatal("Token 验证失败，程序无法启动.")
+	}*/
+
+	beego.Info("欢迎使用 smallfawn WX")
 	longLinkEnabled, _ := beego.AppConfig.Bool("longlinkenabled")
 
 	comm.RedisInitialize()
@@ -36,6 +45,8 @@ func main() {
 	beego.BConfig.WebConfig.StaticDir["/"] = "swagger"
 
 	beego.SetLogFuncCall(false)
+
+	beego.Run()
 
 	//// 添加日志拦截器
 	//var FilterLog = func(ctx *context.Context) {
@@ -63,15 +74,54 @@ func main() {
 	//goDecryptText := qqCryptor.Decrypt(encryptText, encryptKey)
 	//fmt.Printf("go加密解密结果: %x\n", goDecryptText)
 
-	beego.Run()
-	return
+	//beego.Run()
+	//return
 
-	deadline := time.Date(2025, time.Month(1), 3, 0, 0, 0, 0, time.Local)
+	/*deadline := time.Date(2025, time.Month(1), 3, 0, 0, 0, 0, time.Local)
 	if time.Now().Before(deadline) {
 		//启动
 		beego.Run()
 	} else {
 		fmt.Println("请联系相关客服")
-	}
+	}*/
 
 }
+
+// 验证 token 的函数
+/*func verifyToken(token string) bool {
+	// 请求验证接口
+	url := "https://gitee.com/smallfawn/Note/raw/main/ksinvite.json?key=" + token
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		logrus.Errorf("创建请求失败: %v", err)
+		return false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logrus.Errorf("请求失败: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态码
+	if resp.StatusCode != http.StatusOK {
+		logrus.Errorf("验证接口返回状态码: %d", resp.StatusCode)
+		return true
+	}
+
+	// 假设接口返回 "true" 或 "false"
+	// 这里可以根据实际接口返回格式进行解析
+	var result bool
+	if resp.Body != nil {
+		decoder := json.NewDecoder(resp.Body)
+		if err := decoder.Decode(&result); err != nil {
+			logrus.Errorf("解析响应失败: %v", err)
+			return false
+		}
+	}
+
+	return result
+}*/

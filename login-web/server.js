@@ -266,14 +266,17 @@ async function smsApply(username, password) {
     const errMsgXml = (res.Data && res.Data.baseResponse && res.Data.baseResponse.errMsg && res.Data.baseResponse.errMsg.string) || '';
     const retCode = res.Data && res.Data.baseResponse && res.Data.baseResponse.ret;
     const um = errMsgXml.match(/<Url><!\[CDATA\[(.*?)\]\]><\/Url>/) || errMsgXml.match(/<Url>(.*?)<\/Url>/);
-    if (String(retCode) === '-106' && um && um[1]) {
+    const contentM = errMsgXml.match(/<Content><!\[CDATA\[(.*?)\]\]><\/Content>/) || errMsgXml.match(/<Content>(.*?)<\/Content>/);
+    const sliderU = um && um[1] && /shminorshort\.weixin\.qq\.com|wx\.qq\.com.*tcaptcha|captcha/.test(um[1]) ? um[1] : '';
+    if (String(retCode) === '-106' && sliderU) {
       sms.phase = 'slider'; sms.msg = '需滑块安全验证:点下方链接在浏览器完成验证,然后回来重新点「申请验证码」';
-      sms.sliderUrl = um[1];
+      sms.sliderUrl = sliderU;
       log('warn', '短信登录:微信要求滑块验证(环境检测),验证链接已生成,待用户手动完成');
       return { ok: false, msg: '需滑块安全验证:请点页面下方链接完成滑块,再回来重新申请' };
     }
     sms.phase = 'idle'; sms.msg = ''; sms.sliderUrl = '';
-    return { ok: false, msg: `申请失败(ret=${retCode}): ${res.Message}(检查账号密码是否正确)` };
+    const cmsg = contentM && contentM[1] ? contentM[1] : (res.Message || '未知错误');
+    return { ok: false, msg: `申请失败(ret=${retCode}): ${cmsg}` };
   } catch (e) { sms.phase = 'idle'; sms.msg = ''; return { ok: false, msg: `请求失败: ${e.message}` }; }
 }
 async function smsAgain() {

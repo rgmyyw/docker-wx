@@ -72,7 +72,8 @@ const CHANNELS = {
   Win: '/api/Login/GetQRWin', Mac: '/api/Login/GetQRMac',
 };
 /* 短信验证登录(-106 解法):62dataSMSApply → 收码 → 62dataSMSVerify → 62data 完成 */
-const sms = { phase: 'idle', msg: '', checkUrl: '', againUrl: '', cookie: '', data62: '', username: '', password: '', sliderUrl: '' };
+const sms = { phase: 'idle', msg: '', checkUrl: '', againUrl: '', cookie: '', data62: '', username: '', password: '', sliderUrl: '', qrPhase: '', qrUrl: '', qrCheck: '' };
+/* 扫码验证设备(备用通道):62dataQRCodeApply → 微信扫码确认 → 62dataQRCodeVerify 轮询 */
 let info = loadInfo();
 function loadInfo() { try { return JSON.parse(fs.readFileSync(INFO_PATH, 'utf8')); } catch { return {}; } }
 function saveInfo() { try { fs.writeFileSync(INFO_PATH, JSON.stringify(info, null, 2)); } catch {} }
@@ -249,6 +250,49 @@ async function logout() {
   return { ok: true, msg: '已退出' };
 }
 
+/* ---------------- 扫码验证设备(备用通道) ---------------- */
+async function qrApply() {
+  let c = {}; try { c = JSON.parse(fs.readFileSync(CREDS_PATH, 'utf8')); } catch {}
+  const u = sms.username || c.username, p = sms.password || c.password;
+  if (!u || !p) return { ok: false, msg: '请先输入账号密码(或已被记住)' };
+  log('info', '扫码验证:申请验证二维码');
+  try {
+    const res = await api('/api/Login/62dataQRCodeApply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ UserName: u, Password: p, Data62: info.data62 || '', DeviceName: DEVICE_NAME }),
+    });
+    log('info', '扫码验证:Apply 响应', brief(res).slice(0, 300));
+    if (res.Success && res.Data && res.Data.QrUrl) {
+      sms.qrUrl = res.Data.QrUrl; sms.qrCheck = res.Data.CheckUrl; sms.qrPhase = 'wait';
+      info.data62 = res.Data62 || info.data62; saveInfo();
+      sms.msg = '扫码验证:手机微信扫页面上的验证码并确认';
+      return { ok: true, msg: '验证二维码已生成,手机微信扫码并确认' };
+    }
+    return { ok: false, msg: `生成失败: ${res.Message || '未知'}` };
+  } catch (e) { return { ok: false, msg: `请求失败: ${e.message}` }; }
+}
+let qrBusy = false;
+async function qrPoll() {
+  if (sms.qrPhase !== 'wait' || !sms.qrCheck || qrBusy) return;
+  qrBusy = true;
+  try {
+    const res = await api('/api/Login/62dataQRCodeVerify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Url: sms.qrCheck }),
+    });
+    const raw = typeof res.Data === 'string' ? res.Data : JSON.stringify(res.Data);
+    if (/window\.code=200|wx_code=/.test(raw)) {
+      sms.qrPhase = 'ok'; sms.qrCheck = '';
+      sms.msg = '✔ 设备验证通过!请点「申请验证码」收取短信';
+      log('info', '扫码验证:设备验证通过');
+      notify('docker-wx 设备扫码验证通过', '请回登录台点「申请验证码」收取短信完成登录');
+    } else if (/window\.code=201/.test(raw)) {
+      sms.msg = '扫码验证:已扫码,请在手机上点确认';
+    }
+  } catch {} finally { qrBusy = false; }
+}
+setInterval(qrPoll, 4000);
+
 setInterval(poll, 3000);
 
 /* ---------------- 短信验证登录(-106 解法) ---------------- */
@@ -344,7 +388,7 @@ async function smsVerify(code) {
 })();
 
 /* ---------------- HTTP ---------------- */
-function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString(), channels: Object.keys(CHANNELS), smsPhase: sms.phase, smsMsg: sms.msg, sliderUrl: sms.sliderUrl }); }
+function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString(), channels: Object.keys(CHANNELS), smsPhase: sms.phase, smsMsg: sms.msg, sliderUrl: sms.sliderUrl, qrPhase: sms.qrPhase, qrUrl: sms.qrUrl }); }
 
 const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -413,6 +457,7 @@ button.primary:hover{opacity:.88;color:#fff}
 <input id="smsCode" placeholder="短信验证码" autocomplete="off">
 <button class="primary" onclick="smsAct('verify')">验证并登录</button>
 <button onclick="smsAct('again')">重发验证码</button>
+<button onclick="smsAct('qrapply')">扫码验证设备</button>
 <div id="smsMsg">扫码被 -106 拦截时用此方式:输入账号密码申请验证码,微信会发送短信到绑定手机</div>
 <div class="tip" style="margin-top:6px"><span id="credTip">账号密码将记住在服务端(调试用,</span><a style="color:var(--acc);cursor:pointer" onclick="forgetCreds()">清除</a><span id="credTip2">)</span></div>
 </div>
@@ -444,6 +489,8 @@ async function smsAct(k){
   document.getElementById('smsMsg').textContent='验证中…';
   try{const r=await(await fetch('/sms/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c})})).json();document.getElementById('smsMsg').textContent=r.msg;toast(r.msg);}catch(e){document.getElementById('smsMsg').textContent='请求失败';}}
  if(k==='again'){try{const r=await(await fetch('/sms/again',{method:'POST'})).json();toast(r.msg);}catch(e){toast('请求失败');}}
+ if(k==='qrapply'){toast('生成验证码…');
+  try{const r=await(await fetch('/sms/qrapply',{method:'POST'})).json();toast(r.msg);}catch(e){toast('请求失败');}}
 }
 async function tick(){
  try{
@@ -467,8 +514,9 @@ async function tick(){
   if(s.channels&&s.channels.join()!==lastChannels){lastChannels=s.channels.join();sel.innerHTML=s.channels.map(c=>'<option'+(c===s.channel?' selected':'')+'>'+c+'</option>').join('');}
   else if(sel.value!==s.channel){sel.value=s.channel;}
   const sm=document.getElementById('smsMsg');
+  const qrHtml=(s.qrPhase==='wait'&&s.qrUrl)?'<div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px"><img src="'+s.qrUrl+'" style="width:200px;height:200px;border-radius:10px;background:#fff;padding:8px"><span style="color:var(--sub);font-size:12px">手机微信扫此码并确认(设备验证)</span></div>':'';
   const sliderHtml=s.sliderUrl?'<a href="'+s.sliderUrl.replace(/"/g,'&quot;')+'" target="_blank" style="color:var(--acc);font-weight:600">👉 点此打开滑块验证页面(完成后回来重新申请)</a><br><div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px"><img src="/slider-qr" style="width:180px;height:180px;border-radius:10px;background:#fff;padding:8px"><span style="color:var(--sub);font-size:12px">手机微信扫此码打开验证页(需在微信内完成)</span></div>':'';
-  const want=(s.smsMsg||'扫码被 -106 拦截时用此方式')+ (sliderHtml?'<br>'+sliderHtml:'');
+  const want=(s.smsMsg||'扫码被 -106 拦截时用此方式')+ (sliderHtml?'<br>'+sliderHtml:'')+(qrHtml?qrHtml:'');
   if(want!==lastSmsHtml){lastSmsHtml=want;sm.innerHTML=want;}
  }catch(e){}
  setTimeout(tick,3000);
@@ -524,6 +572,8 @@ http.createServer(async (req, res) => {
     try { fs.unlinkSync(CREDS_PATH); } catch {}
     log('info', '已清除记住的账号密码');
     json(200, { ok: true, msg: '已清除' });
+  } else if (req.method === 'POST' && url.pathname === '/sms/qrapply') {
+    json(200, await qrApply());
   } else if (req.method === 'POST' && url.pathname === '/sms/apply') {
     let b = ''; for await (const c of req) b += c;
     const { username, password } = JSON.parse(b || '{}');

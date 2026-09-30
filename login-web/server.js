@@ -36,7 +36,7 @@ function log(level, msg, detail) {
   const line = `[${e.local}][${level}] ${msg}${detail ? ` | ${detail}` : ''}`;
   if (level === 'error') console.error(line); else console.log(line);
 }
-const brief = (o) => { try { const s = JSON.stringify(o); return s && s.length > 500 ? s.slice(0, 500) + '…' : s; } catch { return String(o); } };
+const brief = (o) => { try { const s = JSON.stringify(o); return s && s.length > 2000 ? s.slice(0, 2000) + '…' : s; } catch { return String(o); } };
 
 /* ---------------- 通知 ---------------- */
 async function notifyDing(title, text) {
@@ -239,7 +239,7 @@ async function heartbeat(acc) {
   let res;
   try { res = await api(`/api/Login/HeartBeat?wxid=${encodeURIComponent(acc.wxid)}`, { method: 'POST' }); }
   catch (e) { log('error', `[${acc.alias}] 心跳请求失败: ${e.message}`); acc.hbFails++; await checkOffline(acc); return; }
-  if (res.Success) { if (acc.hbFails > 0) log('info', `[${acc.alias}] 心跳恢复`); acc.hbFails = 0; acc.lastHbOk = new Date().toISOString(); return; }
+  if (res.Success) { if (acc.hbFails > 0) log('info', `[${acc.alias}] 心跳恢复`); log('debug', `[${acc.alias}] 心跳OK`); acc.hbFails = 0; acc.lastHbOk = new Date().toISOString(); return; }
   acc.hbFails++;
   log('warn', `[${acc.alias}] 心跳失败(${acc.hbFails}/3): ${res.Message}`);
   await checkOffline(acc);
@@ -640,6 +640,12 @@ tick();
 </script></body></html>`;
 
 http.createServer(async (req, res) => {
+  const _t0 = Date.now();
+  res.on('finish', () => {
+    const _p = req.url.split('?')[0];
+    if (['/', '/status', '/logs', '/qr', '/slider-qr'].includes(_p)) return;
+    log('info', `HTTP ${req.method} ${_p} -> ${res.statusCode} (${Date.now() - _t0}ms)`);
+  });
   const url = new URL(req.url, 'http://x');
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
   const body = async () => { let b = ''; for await (const c of req) b += c; try { return JSON.parse(b || '{}'); } catch { return {}; } };

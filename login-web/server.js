@@ -64,8 +64,13 @@ async function notify(title, text) {
 
 /* ---------------- 状态与凭证 ---------------- */
 const st = { phase: 'boot', msg: '初始化', uuid: '', qrB64: '', qrTs: 0, expireTs: 0, wxid: '', nick: '', headUrl: '', deviceId: '', loginTime: '', lastHbOk: '', hbFails: 0, offlineNotified: false, channel: 'Pad' };
-/* 取码通道:Pad=8.0.53 正式版;Padx=换版本号绕过 -106 验证 */
-const CHANNELS = { Pad: '/api/Login/GetQRPad', Padx: '/api/Login/GetQRPadx' };
+/* 取码通道:Pad=8.0.53 正式版;Padx=换版本号绕过 -106 验证;Pad1=云函数;Win/Mac=桌面端(风控策略不同) */
+const CHANNELS = {
+  Pad: '/api/Login/GetQRPad', Padx: '/api/Login/GetQRPadx', Pad1: '/api/Login/GetQRPad1',
+  Win: '/api/Login/GetQRWin', Mac: '/api/Login/GetQRMac',
+};
+/* 短信验证登录(-106 解法):62dataSMSApply → 收码 → 62dataSMSVerify → 62data 完成 */
+const sms = { phase: 'idle', msg: '', checkUrl: '', againUrl: '', cookie: '', data62: '', username: '', password: '' };
 let info = loadInfo();
 function loadInfo() { try { return JSON.parse(fs.readFileSync(INFO_PATH, 'utf8')); } catch { return {}; } }
 function saveInfo() { try { fs.writeFileSync(INFO_PATH, JSON.stringify(info, null, 2)); } catch {} }
@@ -236,6 +241,72 @@ async function logout() {
 }
 
 setInterval(poll, 3000);
+
+/* ---------------- 短信验证登录(-106 解法) ---------------- */
+async function smsApply(username, password) {
+  if (!username || !password) return { ok: false, msg: '请输入微信账号与密码' };
+  sms.username = username; sms.password = password; sms.phase = 'applying'; sms.msg = '正在申请短信验证…';
+  log('info', `短信登录:申请验证(账号=${username.slice(0, 3)}***,密码不记录)`);
+  try {
+    const res = await api('/api/Login/62dataSMSApply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ UserName: username, Password: password, DeviceName: DEVICE_NAME }),
+    });
+    log(res.Success ? 'info' : 'error', `短信登录:SMSApply 响应`, brief(res).slice(0, 300));
+    if (res.Message === '已申请短信验证' && res.Data && res.Data.CheckUrl) {
+      sms.checkUrl = res.Data.CheckUrl; sms.againUrl = res.Data.AgainUrl || ''; sms.cookie = res.Data.Cookie || '';
+      sms.data62 = res.Data62 || '';
+      sms.phase = 'applied'; sms.msg = '验证码已发送到该微信绑定的手机,请查收短信';
+      log('info', '短信登录:验证码已申请,等待用户输入');
+      return { ok: true, msg: '验证码已发送,请输入收到的短信验证码' };
+    }
+    sms.phase = 'idle'; sms.msg = '';
+    return { ok: false, msg: `申请失败: ${res.Message || '未知错误'}(检查账号密码是否正确)` };
+  } catch (e) { sms.phase = 'idle'; sms.msg = ''; return { ok: false, msg: `请求失败: ${e.message}` }; }
+}
+async function smsAgain() {
+  if (!sms.againUrl) return { ok: false, msg: '尚未申请验证码' };
+  try {
+    const res = await api('/api/Login/62dataSMSAgain', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Url: sms.againUrl, Cookie: sms.cookie }),
+    });
+    log('info', `短信登录:重发验证码 ${res.Success ? '成功' : '失败 ' + res.Message}`);
+    return res.Success ? { ok: true, msg: '已重发' } : { ok: false, msg: res.Message || '重发失败' };
+  } catch (e) { return { ok: false, msg: `请求失败: ${e.message}` }; }
+}
+async function smsVerify(code) {
+  if (sms.phase !== 'applied') return { ok: false, msg: '请先申请验证码' };
+  if (!code) return { ok: false, msg: '请输入验证码' };
+  sms.phase = 'verifying'; sms.msg = '正在提交验证码…';
+  log('info', '短信登录:提交验证码');
+  try {
+    const v = await api('/api/Login/62dataSMSVerify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Url: sms.checkUrl, Cookie: sms.cookie, Sms: code }),
+    });
+    log(v.Success ? 'info' : 'error', `短信登录:SMSVerify 响应`, brief(v).slice(0, 200));
+    if (!v.Success) { sms.phase = 'applied'; return { ok: false, msg: `验证失败: ${v.Message}(可重试)` }; }
+    // 验证通过 → 用同一 62 凭证重新登录完成会话
+    log('info', '短信登录:验证通过,正在完成登录');
+    const res = await api('/api/Login/62data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ UserName: sms.username, Password: sms.password, Data62: sms.data62, DeviceName: DEVICE_NAME }),
+    });
+    log('info', '短信登录:62data 完成响应', brief(res).slice(0, 300));
+    const wxid = res.Data?.AcctSectResp?.UserName || deepFindWxid(res.Data);
+    if (res.Success && wxid) {
+      info.deviceId = info.deviceId || '';
+      info.wxid = wxid; info.data62 = sms.data62 || info.data62; info.loginTime = new Date().toISOString(); saveInfo();
+      Object.assign(st, { phase: 'ok', msg: '登录成功(短信验证)', wxid, nick: res.Data?.AcctSectResp?.NickName || '', loginTime: info.loginTime, lastHbOk: info.loginTime, hbFails: 0, offlineNotified: false });
+      sms.phase = 'idle'; sms.msg = ''; sms.password = '';
+      log('info', `短信登录成功 wxid=${wxid}`);
+      return { ok: true, msg: `登录成功 ${wxid}` };
+    }
+    sms.phase = 'applied';
+    return { ok: false, msg: `最终登录未成功: ${res.Message}(若提示仍需验证,可重新申请)` };
+  } catch (e) { sms.phase = 'applied'; return { ok: false, msg: `请求失败: ${e.message}` }; }
+}
 (async () => {
   log('info', `login-web 启动 api=${API} 钉钉=${DING.webhook ? '已配置' : '未配置'} SMTP=${SMTP.user ? '已配置' : '未配置'}`);
   if (info.wxid) {
@@ -245,7 +316,7 @@ setInterval(poll, 3000);
 })();
 
 /* ---------------- HTTP ---------------- */
-function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString() }); }
+function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString(), channels: Object.keys(CHANNELS), smsPhase: sms.phase, smsMsg: sms.msg }); }
 
 const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -285,14 +356,37 @@ button.primary:hover{opacity:.88;color:#fff}
 #logs{max-height:260px;overflow-y:auto;font:12px/1.9 ui-monospace,Menlo,Consolas,monospace;color:var(--sub)}
 #logs .lv-info{color:var(--tx)}#logs .lv-warn{color:var(--warn)}#logs .lv-error{color:var(--err)}#logs .lv-debug{color:#5b6472}
 #logs .t{color:#5b6472;margin-right:8px}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tab{flex:1;background:#1f2530;color:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;cursor:pointer}
+.tab.active{color:var(--tx);border-color:var(--acc)}
+.smsform{display:flex;flex-direction:column;gap:10px;padding-top:4px}
+.smsform input,.chsel select{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;width:100%}
+.chsel{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--sub)}
+.chsel select{flex:1;width:auto}
+#smsMsg{color:var(--warn);font-size:13px;text-align:center;min-height:20px}
 #toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#1f2530;border:1px solid var(--line);padding:10px 18px;border-radius:9px;font-size:13px;display:none;z-index:9}
 </style></head><body><div class="wrap">
 <h1><span class="dot" id="dot"></span>微信登录台 <span style="color:var(--sub);font-size:13px;font-weight:400">docker-wx · 安卓Pad 8.0.53</span></h1>
 <div class="grid">
-<div class="card"><h2>扫码登录</h2>
+<div class="card"><h2>登录</h2>
+<div class="tabs"><button class="tab active" id="tabBtn-qr" onclick="switchTab('qr')">扫码登录</button><button class="tab" id="tabBtn-sms" onclick="switchTab('sms')">短信登录(-106)</button></div>
+<div id="tab-qr">
 <div class="qrbox">
 <div id="qrArea"><img id="qr" src="/qr"></div>
 <div class="tip" id="qrTip">微信扫一扫,过期自动刷新</div>
+</div>
+<div class="chsel">取码通道 <select id="channel" onchange="chgChannel()"></select></div>
+</div>
+<div id="tab-sms" style="display:none">
+<div class="smsform">
+<input id="smsUser" placeholder="微信账号(手机号/QQ号/微信号)" autocomplete="off">
+<input id="smsPass" type="password" placeholder="微信密码(仅用于本次登录,不存储)">
+<button onclick="smsAct('apply')">申请验证码</button>
+<input id="smsCode" placeholder="短信验证码" autocomplete="off">
+<button class="primary" onclick="smsAct('verify')">验证并登录</button>
+<button onclick="smsAct('again')">重发验证码</button>
+<div id="smsMsg">扫码被 -106 拦截时用此方式:输入账号密码申请验证码,微信会发送短信到绑定手机</div>
+</div>
 </div></div>
 <div class="card"><h2>状态</h2><div id="stateBody"></div>
 <div class="btns">
@@ -306,7 +400,19 @@ button.primary:hover{opacity:.88;color:#fff}
 <div class="foot">API: ${API} · 图片直链 <a style="color:var(--acc)" href="/qr" target="_blank">/qr</a> · 状态 <a style="color:var(--acc)" href="/status" target="_blank">/status</a> · 日志 <a style="color:var(--acc)" href="/logs" target="_blank">/logs</a></div>
 </div><div id="toast"></div>
 <script>
-let lastUuid='';let lastLogTs='';
+let lastUuid='';let lastLogTs='';let lastChannels='';
+function switchTab(k){document.getElementById('tab-qr').style.display=k==='qr'?'':'none';document.getElementById('tab-sms').style.display=k==='sms'?'':'none';document.getElementById('tabBtn-qr').className='tab'+(k==='qr'?' active':'');document.getElementById('tabBtn-sms').className='tab'+(k==='sms'?' active':'');}
+async function chgChannel(){const ch=document.getElementById('channel').value;if(!ch)return;toast('切换通道 '+ch+' …');
+ try{const r=await(await fetch('/channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:ch})})).json();toast(r.msg);}catch(e){toast('请求失败');}}
+async function smsAct(k){
+ if(k==='apply'){const u=document.getElementById('smsUser').value.trim(),p=document.getElementById('smsPass').value;if(!u||!p){toast('请输入账号和密码');return;}
+  document.getElementById('smsMsg').textContent='申请中…';
+  try{const r=await(await fetch('/sms/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})).json();document.getElementById('smsMsg').textContent=r.msg||r.ok?'成功':'失败';toast(r.msg);}catch(e){document.getElementById('smsMsg').textContent='请求失败';}}
+ if(k==='verify'){const c=document.getElementById('smsCode').value.trim();if(!c){toast('请输入验证码');return;}
+  document.getElementById('smsMsg').textContent='验证中…';
+  try{const r=await(await fetch('/sms/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c})})).json();document.getElementById('smsMsg').textContent=r.msg;toast(r.msg);}catch(e){document.getElementById('smsMsg').textContent='请求失败';}}
+ if(k==='again'){try{const r=await(await fetch('/sms/again',{method:'POST'})).json();toast(r.msg);}catch(e){toast('请求失败');}}
+}
 async function tick(){
  try{
   const [s,lg]=await Promise.all([(fetch('/status')).then(r=>r.json()),(fetch('/logs')).then(r=>r.json())]);
@@ -325,6 +431,10 @@ async function tick(){
   }
   if(lg.ts!==lastLogTs){lastLogTs=lg.ts;
     document.getElementById('logs').innerHTML=lg.items.slice().reverse().map(e=>'<div class="lv-'+e.level+'"><span class="t">'+(e.local||e.ts.slice(11,19))+'</span>'+e.msg+(e.detail?'<div style="opacity:.55;word-break:break-all">'+e.detail+'</div>':'')+'</div>').join('');}
+  const sel=document.getElementById('channel');
+  if(s.channels&&s.channels.join()!==lastChannels){lastChannels=s.channels.join();sel.innerHTML=s.channels.map(c=>'<option'+(c===s.channel?' selected':'')+'>'+c+'</option>').join('');}
+  else if(sel.value!==s.channel){sel.value=s.channel;}
+  if(s.smsMsg&&document.getElementById('smsMsg').textContent!==s.smsMsg)document.getElementById('smsMsg').textContent=s.smsMsg;
  }catch(e){}
  setTimeout(tick,3000);
 }
@@ -359,7 +469,25 @@ http.createServer(async (req, res) => {
     json(200, await logout());
   } else if (req.method === 'POST' && url.pathname === '/test-notify') {
     log('info', '手动触发测试推送');
-    json(200, await notify('docker-wx 登录台测试推送', `通道自检 ${new Date().toLocaleString()}\n\n收到本条说明钉钉与邮件通道工作正常。`));
+    json(200, await notify('docker-wx 登录台测试推送', `通道自检 ${new Date().toLocaleString('zh-CN', { hour12: false })}\n\n收到本条说明钉钉与邮件通道工作正常。`));
+  } else if (req.method === 'POST' && url.pathname === '/channel') {
+    let b = ''; for await (const c of req) b += c;
+    const ch = JSON.parse(b || '{}').channel;
+    if (!CHANNELS[ch]) { json(400, { ok: false, msg: `未知通道 ${ch}` }); return; }
+    st.channel = ch;
+    log('info', `手动切换取码通道 → ${ch}`);
+    await newQR(true, `手动切换通道 ${ch}`);
+    json(200, { ok: true, msg: `已切换到 ${ch} 通道并取新码` });
+  } else if (req.method === 'POST' && url.pathname === '/sms/apply') {
+    let b = ''; for await (const c of req) b += c;
+    const { username, password } = JSON.parse(b || '{}');
+    json(200, await smsApply(username, password));
+  } else if (req.method === 'POST' && url.pathname === '/sms/again') {
+    json(200, await smsAgain());
+  } else if (req.method === 'POST' && url.pathname === '/sms/verify') {
+    let b = ''; for await (const c of req) b += c;
+    const { code } = JSON.parse(b || '{}');
+    json(200, await smsVerify(code));
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Not Found');
   }

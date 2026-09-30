@@ -266,6 +266,15 @@ async function checkOffline(acc) {
 }
 setInterval(heartbeatAll, 2 * 60_000);
 
+/* 一键检测:立即对所有账号心跳并返回结果 */
+async function checkNow() {
+  if (!accounts.length) return { ok: false, msg: '无账号' };
+  log('info', '手动触发全账号在线检测');
+  for (const acc of accounts) await heartbeat(acc);
+  const off = accounts.filter(a => a.offline).length;
+  return { ok: true, msg: `检测完成:${accounts.length} 个账号,${accounts.length - off} 在线${off ? ',' + off + ' 掉线' : ''}` };
+}
+
 /* ---------------- 二次登录/退出(按账号) ---------------- */
 async function reloginAcc(acc, auto) {
   if (!acc.data62) return { ok: false, msg: '无 62 凭证(需扫码)' };
@@ -510,6 +519,7 @@ button.small{padding:5px 10px;font-size:12px}
 <span class="summary" id="summary"></span>
 <span class="sp"></span>
 <button class="primary" onclick="openModal()">＋ 添加账号</button>
+<button onclick="act(&apos;checknow&apos;,&apos;&apos;)">检测状态</button>
 <button onclick="location.href=&apos;/logspage&apos;">全量日志</button>
 </div>
 <div class="grid" id="accGrid"></div>
@@ -719,6 +729,8 @@ http.createServer(async (req, res) => {
     json(200, await smsVerify(code));
   } else if (req.method === 'POST' && url.pathname === '/sms/qrapply') {
     json(200, await qrApply());
+  } else if (req.method === 'POST' && url.pathname === '/checknow') {
+    json(200, await checkNow());
   } else if (req.method === 'POST' && url.pathname === '/test-notify') {
     log('info', '手动触发测试推送');
     json(200, await notify('docker-wx 登录台测试推送', `通道自检 ${fmtLocal(new Date())}`));

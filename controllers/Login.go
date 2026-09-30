@@ -474,7 +474,7 @@ func (c *LoginController) Data62SMSApply() {
 	// 二次验证使用短信验证
 	message, transed := WXDATA.Data.(mm.UnifyAuthResponse)
 	if transed && strings.Index(message.GetBaseResponse().GetErrMsg().GetString_(), "&ticket=") >= 0 {
-		checkUrl, againUrl, setCookie := Login.WechatSMS1(message.GetBaseResponse().GetErrMsg().GetString_(), comm.GenDefaultIpadUA(), reqdata.Proxy)
+		checkUrl, againUrl, setCookie := Login.WechatSMS1(message.GetBaseResponse().GetErrMsg().GetString_(), comm.GenRealWeixinUA(), reqdata.Proxy)
 		WXDATA = models.ResponseResult{
 			Code:    0,
 			Success: true,
@@ -516,7 +516,7 @@ func (c *LoginController) Data62SMSAgain() {
 	headers := &map[string]string{
 		"Cookie": reqdata.Cookie,
 	}
-	res := comm.HttpGet1(reqdata.Url, headers, comm.GenDefaultIpadUA(), reqdata.Proxy)
+	res := comm.HttpGet1(reqdata.Url, headers, comm.GenRealWeixinUA(), reqdata.Proxy)
 	resJson, err := simplejson.NewJson([]byte(res))
 	if err != nil {
 		Result := models.ResponseResult{
@@ -579,7 +579,7 @@ func (c *LoginController) Data62SMSVerify() {
 	headers := &map[string]string{
 		"Cookie": reqdata.Cookie,
 	}
-	res := comm.HttpGet1(verifyUrl, headers, comm.GenDefaultIpadUA(), reqdata.Proxy)
+	res := comm.HttpGet1(verifyUrl, headers, comm.GenRealWeixinUA(), reqdata.Proxy)
 	resJson, err := simplejson.NewJson([]byte(res))
 	if err != nil {
 		Result := models.ResponseResult{
@@ -654,7 +654,7 @@ func (c *LoginController) Data62QRCodeApply() {
 	// 二次验证使用短信验证
 	message, transed := WXDATA.Data.(mm.UnifyAuthResponse)
 	if transed && strings.Index(message.GetBaseResponse().GetErrMsg().GetString_(), "&ticket=") >= 0 {
-		qrUrl, checkUrl := Login.WeChatQrCode1(message.GetBaseResponse().GetErrMsg().GetString_(), comm.GenDefaultIpadUA(), reqdata.Proxy)
+		qrUrl, checkUrl := Login.WeChatQrCode1(message.GetBaseResponse().GetErrMsg().GetString_(), comm.GenRealWeixinUA(), reqdata.Proxy)
 		WXDATA = models.ResponseResult{
 			Code:    0,
 			Success: true,
@@ -694,7 +694,7 @@ func (c *LoginController) Data62QRCodeVerify() {
 	// 验证短信
 	verifyUrl := reqdata.Url
 	verifyUrl = strings.Replace(verifyUrl, "[[[currentMilliseStamp]]]", string(time.Now().Unix()), -1)
-	res := comm.HttpGet1(verifyUrl, nil, comm.GenDefaultIpadUA(), reqdata.Proxy)
+	res := comm.HttpGet1(verifyUrl, nil, comm.GenRealWeixinUA(), reqdata.Proxy)
 	WXDATA := models.ResponseResult{
 		Code:    0,
 		Success: true,

@@ -11,6 +11,7 @@ const http = require('http');
 const fs = require('fs');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const QRCode = require('qrcode');
 
 const API = process.env.wxapi_url || 'http://wxapi:8057';
 const PORT = process.env.port || 8058;
@@ -446,7 +447,7 @@ async function tick(){
   if(s.channels&&s.channels.join()!==lastChannels){lastChannels=s.channels.join();sel.innerHTML=s.channels.map(c=>'<option'+(c===s.channel?' selected':'')+'>'+c+'</option>').join('');}
   else if(sel.value!==s.channel){sel.value=s.channel;}
   const sm=document.getElementById('smsMsg');
-  const sliderHtml=s.sliderUrl?'<a href="'+s.sliderUrl.replace(/"/g,'&quot;')+'" target="_blank" style="color:var(--acc);font-weight:600">👉 点此打开滑块验证页面(完成后回来重新申请)</a><br>':'';
+  const sliderHtml=s.sliderUrl?'<a href="'+s.sliderUrl.replace(/"/g,'&quot;')+'" target="_blank" style="color:var(--acc);font-weight:600">👉 点此打开滑块验证页面(完成后回来重新申请)</a><br><div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px"><img src="/slider-qr" style="width:180px;height:180px;border-radius:10px;background:#fff;padding:8px"><span style="color:var(--sub);font-size:12px">手机微信扫此码打开验证页(需在微信内完成)</span></div>':'';
   const want=(s.smsMsg||'扫码被 -106 拦截时用此方式')+ (sliderHtml?'<br>'+sliderHtml:'');
   if(sm.innerHTML!==want)sm.innerHTML=want;
  }catch(e){}
@@ -475,6 +476,10 @@ http.createServer(async (req, res) => {
     json(200, JSON.parse(statusJson()));
   } else if (req.method === 'GET' && url.pathname === '/logs') {
     json(200, { ts: LOGS.length ? LOGS[LOGS.length - 1].ts : '', items: LOGS });
+  } else if (req.method === 'GET' && url.pathname === '/slider-qr') {
+    if (!sms.sliderUrl) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('当前无滑块验证链接'); return; }
+    const buf = await QRCode.toBuffer(sms.sliderUrl, { width: 240, margin: 2 });
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); res.end(buf);
   } else if (req.method === 'POST' && url.pathname === '/newqr') {
     await newQR(true, '手动重新取码'); json(200, { ok: true, msg: '已重新取码' });
   } else if (req.method === 'POST' && url.pathname === '/relogin') {

@@ -77,6 +77,12 @@ func GenDefaultIpadUA() string {
 	return wechatUserAgent
 }
 
+// GenRealWeixinUA 真机安卓微信 webview UA(2026-09 真机抓包,微信 8.0.72)
+// 用于 shminorshort 安全验证 HTTP 流程(短信申请/提交),比默认 iPad UA 更贴近真实环境
+func GenRealWeixinUA() string {
+	return "Mozilla/5.0 (Linux; Android 16; 24122RKC7C Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/150.0.7871.189 Mobile Safari/537.36 XWEB/1500145 MMWEBSDK/20260502 MMWEBID/4204 REV/379ee0b45c94853caaf778fe44cd28565b749bd1 MicroMessenger/8.0.72.3100(0x28004853) WeChat/arm64 Weixin NetType/WIFI Language/zh_CN ABI/arm64"
+}
+
 func GenDefaultAndroidUA() string {
 	code := Algorithm.AndroidVersion
 	major := 0x0f & (code >> 24)

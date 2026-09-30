@@ -593,7 +593,7 @@ document.getElementById('accGrid').addEventListener('click', function(e){
   var b = e.target.closest('button[data-act]');
   if (!b) return;
   var act = b.getAttribute('data-act'), alias = b.getAttribute('data-alias');
-  if (act === 'hint') { toast('62 免扫码恢复不可用:请点右上「添加账号」扫码恢复该号'); }
+  if (act === 'hint') { toast('请扫码恢复该号'); openModal(); }
   if (act === 'relogin') { accAct('relogin', alias, ''); }
   if (act === 'logout') { if (confirm('退出标识 ' + alias + '?该号需重新扫码')) accAct('logout', alias, ''); }
 });

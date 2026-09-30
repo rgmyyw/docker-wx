@@ -177,7 +177,7 @@ function addAccount(wxid, deviceId, data62) {
     return acc;
   }
   acc = { alias: nextAlias(), wxid, nick: '', headUrl: '', aliasWx: '', uin: '', mobile: '', deviceId: deviceId || '', data62: data62 || '', loginTime: new Date().toISOString(), lastHbOk: '', hbFails: 0, offlineNotified: false };
-  accounts.push(acc); persistAccount(acc); fetchProfile(acc);
+  accounts.push(acc); persistAccount(acc); fetchProfile(acc); heartbeat(acc);
   log('info', `[${acc.alias}] 新账号登录成功 wxid=${wxid},标识=${acc.alias}`);
   return acc;
 }
@@ -241,11 +241,13 @@ async function heartbeat(acc) {
   catch (e) { log('error', `[${acc.alias}] 心跳请求失败: ${e.message}`); acc.hbFails++; await checkOffline(acc); return; }
   if (res.Success) { if (acc.hbFails > 0) log('info', `[${acc.alias}] 心跳恢复`); log('debug', `[${acc.alias}] 心跳OK`); acc.hbFails = 0; acc.lastHbOk = new Date().toISOString(); return; }
   acc.hbFails++;
-  log('warn', `[${acc.alias}] 心跳失败(${acc.hbFails}/3): ${res.Message}`);
+  const definite = /退出|-13/.test(String(res.Message));
+  log('warn', `[${acc.alias}] 心跳失败(${acc.hbFails}/2${definite ? ',确定性错误' : ''}): ${res.Message}`);
+  if (definite) { acc.hbFails = 2; }
   await checkOffline(acc);
 }
 async function checkOffline(acc) {
-  if (acc.hbFails < 3) return;
+  if (acc.hbFails < 2) return;
   log('error', `[${acc.alias}] 连续心跳失败,判定掉线 ${accLabel(acc)}`);
   const r = await reloginAcc(acc, true);
   if (r.ok) {
@@ -258,7 +260,7 @@ async function checkOffline(acc) {
     await notify('docker-wx 微信账号已掉线', `${accLabel(acc)}\n自动恢复失败: ${r.msg}\n\n请打开 ${PAGE_URL} 重新扫码登录该号`);
   }
 }
-setInterval(heartbeatAll, 5 * 60_000);
+setInterval(heartbeatAll, 2 * 60_000);
 
 /* ---------------- 二次登录/退出(按账号) ---------------- */
 async function reloginAcc(acc, auto) {

@@ -32,7 +32,7 @@ const LOGS = [];
 const fmtLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${d.toLocaleTimeString('zh-CN', { hour12: false })}`;
 function log(level, msg, detail) {
   const e = { ts: new Date().toISOString(), local: fmtLocal(new Date()), level, msg, detail };
-  LOGS.push(e); if (LOGS.length > 150) LOGS.shift();
+  LOGS.push(e); if (LOGS.length > 500) LOGS.shift();
   const line = `[${e.local}][${level}] ${msg}${detail ? ` | ${detail}` : ''}`;
   if (level === 'error') console.error(line); else console.log(line);
 }
@@ -442,99 +442,108 @@ function statusJson() {
 
 const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>微信登录台 · docker-wx</title>
+<title>微信账号管理 · docker-wx</title>
 <style>
 :root{--bg:#0f1115;--card:#171a21;--line:#232833;--tx:#e6e9ef;--sub:#8b93a3;--ok:#3fb96f;--warn:#e0a23c;--err:#e05c5c;--acc:#4f8ef7}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--tx);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.wrap{width:100%;max-width:1020px}
-h1{font-size:20px;font-weight:600;display:flex;align-items:center;gap:10px;margin-bottom:16px}
+body{background:var(--bg);color:var(--tx);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh;padding:28px 24px}
+.wrap{max-width:1060px;margin:0 auto}
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+h1{font-size:21px;font-weight:600;display:flex;align-items:center;gap:10px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--sub)}
-.dot.qr{background:var(--warn);box-shadow:0 0 8px var(--warn)}
 .dot.ok{background:var(--ok);box-shadow:0 0 8px var(--ok)}
 .dot.err{background:var(--err)}
-.grid{display:grid;grid-template-columns:340px 1fr;gap:16px}
-@media(max-width:760px){.grid{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
-.card.wide{grid-column:1/-1;margin-top:16px}
-.card h2{font-size:14px;color:var(--sub);font-weight:600;letter-spacing:.05em;margin-bottom:14px;text-transform:uppercase}
-.qrbox{display:flex;flex-direction:column;align-items:center;gap:12px}
-.qrbox img{width:264px;height:264px;border-radius:10px;background:#fff;padding:10px}
-.tip{color:var(--sub);font-size:13px;text-align:center}
-.tip b{color:var(--tx)}
-.acc{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
-.acc img{width:44px;height:44px;border-radius:22px;background:#fff}
-.acc .info{flex:1;min-width:0}
-.acc .nick{font-weight:600;font-size:15px}
-.acc .meta{color:var(--sub);font-size:12px;word-break:break-all}
-.acc .ops{display:flex;gap:6px}
-.acc .ops button{padding:5px 10px;font-size:12px}
-.badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:8px;margin-left:6px}
-.badge.on{background:rgba(63,185,111,.15);color:var(--ok)}
-.badge.off{background:rgba(224,92,92,.15);color:var(--err)}
-.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px}
-.row:last-child{border-bottom:0}
-.row .k{color:var(--sub)}
-.row .v{font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;text-align:right;max-width:60%}
-.btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.hd .sp{flex:1}
+.hd .summary{color:var(--sub);font-size:13px}
 button{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:9px;padding:9px 16px;font-size:13px;cursor:pointer;transition:.15s}
 button:hover{border-color:var(--acc);color:var(--acc)}
 button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
 button.primary:hover{opacity:.88;color:#fff}
-.foot{color:var(--sub);font-size:12px;text-align:center;margin-top:16px}
+button.small{padding:5px 10px;font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.acc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;gap:12px;align-items:center}
+.acc img{width:46px;height:46px;border-radius:23px;background:#fff;flex:none}
+.acc .info{flex:1;min-width:0}
+.acc .nick{font-weight:600;font-size:15px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.acc .meta{color:var(--sub);font-size:12px;word-break:break-all;margin-top:2px}
+.acc .ops{display:flex;flex-direction:column;gap:6px}
+.badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:8px}
+.badge.on{background:rgba(63,185,111,.15);color:var(--ok)}
+.badge.off{background:rgba(224,92,92,.15);color:var(--err)}
+.alias{display:inline-block;font-size:11px;padding:1px 7px;border-radius:8px;background:rgba(79,142,247,.15);color:var(--acc)}
+.empty{color:var(--sub);text-align:center;padding:60px 0;font-size:14px}
+.foot{color:var(--sub);font-size:12px;text-align:center;margin-top:22px}
+.foot a{color:var(--acc);text-decoration:none}
+/* 弹窗 */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.mbox{background:var(--card);border:1px solid var(--line);border-radius:16px;width:100%;max-width:430px;max-height:92vh;overflow-y:auto;padding:20px}
+.mhd{display:flex;align-items:center;margin-bottom:14px}
+.mhd b{font-size:16px;flex:1}
 .tabs{display:flex;gap:8px;margin-bottom:14px}
-.tab{flex:1;background:#1f2530;color:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;cursor:pointer}
+.tab{flex:1;background:#1f2530;color:var(--sub);border:1px solid var(--line);border-radius:9px;padding:8px;font-size:13px;cursor:pointer}
 .tab.active{color:var(--tx);border-color:var(--acc)}
-.smsform{display:flex;flex-direction:column;gap:10px;padding-top:4px}
-.smsform input,.chsel select{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;width:100%}
-.chsel{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--sub)}
-.chsel select{flex:1;width:auto}
-#smsMsg{color:var(--warn);font-size:13px;text-align:center;min-height:20px}
-#logs{max-height:260px;overflow-y:auto;font:12px/1.9 ui-monospace,Menlo,Consolas,monospace;color:var(--sub)}
-#logs .lv-info{color:var(--tx)}#logs .lv-warn{color:var(--warn)}#logs .lv-error{color:var(--err)}#logs .lv-debug{color:#5b6472}
-#logs .t{color:#5b6472;margin-right:8px}
-#toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#1f2530;border:1px solid var(--line);padding:10px 18px;border-radius:9px;font-size:13px;display:none;z-index:9}
+.qrbox{display:flex;flex-direction:column;align-items:center;gap:10px}
+.qrbox img{width:238px;height:238px;border-radius:12px;background:#fff;padding:10px}
+.tip{color:var(--sub);font-size:13px;text-align:center}
+.tip b{color:var(--tx)}
+.chsel{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--sub);width:100%;justify-content:center}
+.chsel select{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.smsform{display:flex;flex-direction:column;gap:10px}
+.smsform input{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;width:100%}
+#smsMsg{color:var(--warn);font-size:13px;text-align:center;min-height:18px}
+.sess{margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+.sess h4{font-size:12px;color:var(--sub);margin-bottom:6px;font-weight:600}
+#sessLogs{max-height:150px;overflow-y:auto;font:11.5px/1.8 ui-monospace,Menlo,Consolas,monospace;color:var(--sub);background:#12141a;border-radius:8px;padding:8px}
+#sessLogs .lv-info{color:var(--tx)}#sessLogs .lv-warn{color:var(--warn)}#sessLogs .lv-error{color:var(--err)}#sessLogs .lv-debug{color:#5b6472}
+#sessLogs .t{color:#5b6472;margin-right:6px}
+.success{background:rgba(63,185,111,.12);border:1px solid rgba(63,185,111,.4);color:var(--ok);border-radius:10px;padding:12px;text-align:center;font-weight:600;margin-bottom:10px;display:none}
+#toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#1f2530;border:1px solid var(--line);padding:10px 18px;border-radius:9px;font-size:13px;display:none;z-index:99}
 </style></head><body><div class="wrap">
-<h1><span class="dot" id="dot"></span>微信登录台 <span style="color:var(--sub);font-size:13px;font-weight:400">docker-wx · 多账号</span></h1>
-<div class="grid">
-<div class="card"><h2>扫码登录(追加新号)</h2>
-<div class="tabs"><button class="tab active" id="tabBtn-qr" onclick="switchTab('qr')">扫码登录</button><button class="tab" id="tabBtn-sms" onclick="switchTab('sms')">短信登录</button></div>
-<div id="tab-qr">
+<div class="hd">
+<h1><span class="dot" id="dot"></span>微信账号管理 <span style="color:var(--sub);font-size:13px;font-weight:400">docker-wx</span></h1>
+<span class="summary" id="summary"></span>
+<span class="sp"></span>
+<button class="primary" onclick="openModal()">＋ 添加账号</button>
+<button onclick="location.href=&apos;/logspage&apos;">全量日志</button>
+</div>
+<div class="grid" id="accGrid"></div>
+<div class="empty" id="empty" style="display:none">还没有账号,点右上「添加账号」扫码登录第一个</div>
+<div class="foot">小程序脚本变量填账号标识(如 <b>1</b> 或 <b>1&amp;2</b>) · <a href="/status">status</a> · <a href="/logspage">日志</a></div>
+</div>
+
+<div id="modal"><div class="mbox">
+<div class="mhd"><b>添加账号</b><button class="small" onclick="closeModal()">关闭</button></div>
+<div class="success" id="okBar"></div>
+<div class="tabs"><button class="tab active" id="tb-qr" onclick="mTab(&apos;qr&apos;)">扫码登录</button><button class="tab" id="tb-sms" onclick="mTab(&apos;sms&apos;)">短信登录</button></div>
+<div id="m-qr">
 <div class="qrbox">
 <div id="qrArea"><img id="qr" src="/qr"></div>
-<div class="tip" id="qrTip">微信扫一扫登录新账号,过期自动刷新</div>
+<div class="tip" id="qrTip">微信扫一扫</div>
+<div class="chsel">通道 <select id="channel" onchange="chgChannel()"></select></div>
 </div>
-<div class="chsel">取码通道 <select id="channel" onchange="chgChannel()"></select></div>
 </div>
-<div id="tab-sms" style="display:none">
+<div id="m-sms" style="display:none">
 <div class="smsform">
 <input id="smsUser" placeholder="微信账号(手机号/QQ号/微信号)" autocomplete="off">
-<input id="smsPass" type="password" placeholder="微信密码(仅本次登录用,不存储)" autocomplete="off">
-<button onclick="smsAct('apply')">申请验证码</button>
+<input id="smsPass" type="password" placeholder="微信密码(仅登录用,记住于服务端)" autocomplete="off">
+<button onclick="smsAct(&apos;apply&apos;)">申请验证码</button>
 <input id="smsCode" placeholder="短信验证码" autocomplete="off">
-<button class="primary" onclick="smsAct('verify')">验证并登录</button>
-<button onclick="smsAct('again')">重发验证码</button>
-<button onclick="smsAct('qrapply')">扫码验证设备</button>
-<div id="smsMsg">扫码被 -106 拦截时用此方式</div>
-<div class="tip" style="margin-top:6px">账号密码将记住在服务端(<a style="color:var(--acc);cursor:pointer" onclick="forgetCreds()">清除</a>)</div>
+<button class="primary" onclick="smsAct(&apos;verify&apos;)">验证并登录</button>
+<button onclick="smsAct(&apos;again&apos;)">重发验证码</button>
+<div id="smsMsg">被 -106 拦截时用此方式</div>
 </div>
-</div></div>
-<div class="card"><h2>已登录账号(<span id="accN">0</span>)</h2><div id="accList"><div class="tip">暂无账号,扫码登录第一个</div></div>
-<div class="btns">
-<button class="primary" onclick="act('newqr','确认重新取码?')">重新取码</button>
-<button onclick="act('test-notify','发送测试推送?')">测试推送</button>
-</div></div>
-<div class="card wide"><h2>事件日志</h2><div id="logs"></div></div>
 </div>
-<div class="foot">小程序取码:脚本变量填账号标识(1、2…)多号用 & 分隔 · 图片 <a style="color:var(--acc)" href="/qr" target="_blank">/qr</a> · 状态 <a style="color:var(--acc)" href="/status" target="_blank">/status</a> · 日志 <a style="color:var(--acc)" href="/logs" target="_blank">/logs</a></div>
-</div><div id="toast"></div>
+<div class="sess"><h4>本次会话日志</h4><div id="sessLogs"><div style="color:#5b6472">等待操作…</div></div></div>
+</div></div>
+<div id="toast"></div>
+
 <script>
-let lastUuid='';let lastLogTs='';let lastChannels='';let lastSmsHtml='';let lastAccHtml='';
-function switchTab(k){document.getElementById('tab-qr').style.display=k==='qr'?'':'none';document.getElementById('tab-sms').style.display=k==='sms'?'':'none';document.getElementById('tabBtn-qr').className='tab'+(k==='qr'?' active':'');document.getElementById('tabBtn-sms').className='tab'+(k==='sms'?' active':'');}
+let lastUuid='',lastChannels='',lastSmsHtml='',lastAccHtml='',lastTipHtml='',sessStart='',modalOpen=false,doneShown=false;
+function openModal(){modalOpen=true;doneShown=false;sessStart=new Date().toISOString();document.getElementById('modal').style.display='flex';}
+function closeModal(){modalOpen=false;document.getElementById('modal').style.display='none';}
+function mTab(k){document.getElementById('m-qr').style.display=k==='qr'?'':'none';document.getElementById('m-sms').style.display=k==='sms'?'':'none';document.getElementById('tb-qr').className='tab'+(k==='qr'?' active':'');document.getElementById('tb-sms').className='tab'+(k==='sms'?' active':'');}
 async function fillCreds(){try{const c=await(await fetch('/sms/creds')).json();if(c.username&&c.password){document.getElementById('smsUser').value=c.username;document.getElementById('smsPass').value=c.password;}}catch(e){}}
-fillCreds();
-async function forgetCreds(){if(!confirm('清除记住的账号密码?'))return;try{await fetch('/sms/forget',{method:'POST'});document.getElementById('smsUser').value='';document.getElementById('smsPass').value='';toast('已清除');}catch(e){toast('失败');}}
-async function chgChannel(){const ch=document.getElementById('channel').value;if(!ch)return;toast('切换 '+ch+' …');try{const r=await(await fetch('/channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:ch})})).json();toast(r.msg);}catch(e){toast('请求失败');}}
+async function chgChannel(){const ch=document.getElementById('channel').value;if(!ch)return;toast('切换 '+ch+' …');try{const r=await(await fetch('/channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:ch})})).json();toast(r.msg);}catch(e){toast('失败');}}
 async function smsAct(k){
  if(k==='apply'){const u=document.getElementById('smsUser').value.trim(),p=document.getElementById('smsPass').value;if(!u||!p){toast('请输入账号和密码');return;}
   document.getElementById('smsMsg').textContent='申请中…';
@@ -542,46 +551,91 @@ async function smsAct(k){
  if(k==='verify'){const c=document.getElementById('smsCode').value.trim();if(!c){toast('请输入验证码');return;}
   document.getElementById('smsMsg').textContent='验证中…';
   try{const r=await(await fetch('/sms/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:c})})).json();document.getElementById('smsMsg').textContent=r.msg;toast(r.msg);}catch(e){document.getElementById('smsMsg').textContent='请求失败';}}
- if(k==='again'){try{const r=await(await fetch('/sms/again',{method:'POST'})).json();toast(r.msg);}catch(e){toast('请求失败');}}
- if(k==='qrapply'){toast('生成验证码…');try{const r=await(await fetch('/sms/qrapply',{method:'POST'})).json();toast(r.msg);}catch(e){toast('请求失败');}}
+ if(k==='again'){try{const r=await(await fetch('/sms/again',{method:'POST'})).json();toast(r.msg);}catch(e){toast('失败');}}
 }
-async function act(k,confirmMsg){if(confirmMsg&&!confirm(confirmMsg))return;toast('执行中…');
- try{const r=await(await fetch('/'+k,{method:'POST'})).json();toast(r.msg||'完成');}catch(e){toast('请求失败');}}
 async function accAct(k,alias,confirmMsg){if(confirmMsg&&!confirm(confirmMsg))return;toast('执行中…');
  try{const r=await(await fetch('/'+k,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alias})})).json();toast(r.msg);}catch(e){toast('请求失败');}}
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>{t.style.display='none'},2800);}
 async function tick(){
  try{
   const [s,lg]=await Promise.all([(fetch('/status')).then(r=>r.json()),(fetch('/logs')).then(r=>r.json())]);
-  const dot=document.getElementById('dot');
-  dot.className='dot '+(s.accounts.length?'ok':(s.phase==='error'?'err':'qr'));
-  document.getElementById('accN').textContent=s.accounts.length;
-  // 账号列表
-  const accHtml=s.accounts.length?s.accounts.map(a=>{
-   const av=a.headUrl?'<img src="'+a.headUrl+'" onerror="this.style.visibility=&apos;hidden&apos;">':'<img style="visibility:hidden">';
+  document.getElementById('dot').className='dot '+(s.accounts.length?'ok':(s.phase==='error'?'err':'ok'));
+  const on=s.accounts.filter(a=>!a.offline).length;
+  document.getElementById('summary').textContent=s.accounts.length?('共 '+s.accounts.length+' 个账号,'+on+' 个在线'):'';
+  document.getElementById('empty').style.display=s.accounts.length?'none':'';
+  const accHtml=s.accounts.map(a=>{
+   const av=a.headUrl?'<img src=&quot;'+a.headUrl+'&quot; onerror="this.style.visibility=&apos;hidden&apos;">':'<img style="visibility:hidden">';
    const badge=a.offline?'<span class="badge off">掉线</span>':'<span class="badge on">在线</span>';
-   return '<div class="acc">'+av+'<div class="info"><div class="nick">'+(a.nick||'微信用户')+badge+' <span style="color:var(--sub);font-weight:400">标识 '+a.alias+'</span></div><div class="meta">'+a.wxid+(a.aliasWx?' · '+a.aliasWx:'')+(a.mobile?' · '+a.mobile.slice(0,3)+'****'+a.mobile.slice(-4):'')+'</div></div><div class="ops"><button onclick="accAct(&apos;relogin&apos;,&apos;'+a.alias+'&apos;,&apos;62 免扫码重登标识 '+a.alias+'&apos;)">重登</button><button onclick="accAct(&apos;logout&apos;,&apos;'+a.alias+'&apos;,&apos;退出标识 '+a.alias+'&apos;)">退出</button></div></div>';
-  }).join(''):'<div class="tip">暂无账号,扫码登录第一个</div>';
-  if(accHtml!==lastAccHtml){lastAccHtml=accHtml;document.getElementById('accList').innerHTML=accHtml;}
-  // 扫码 tab
-  if(s.uuid&&s.uuid!==lastUuid){lastUuid=s.uuid;document.getElementById('qrArea').innerHTML='<img id="qr" src="/qr?ts='+Date.now()+'">';}
-  const qrSlider=s.sliderUrl?'<div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px"><img src="/slider-qr" style="width:170px;height:170px;border-radius:10px;background:#fff;padding:6px"><span style="font-size:12px">滑块验证:手机微信扫此码完成后点「重新取码」</span></div>':'';
-  const wantTip='<b>'+s.msg+'</b>'+qrSlider;
-  if(wantTip!==lastTipHtml){lastTipHtml=wantTip;document.getElementById('qrTip').innerHTML=wantTip;}
-  const sel=document.getElementById('channel');
-  if(s.channels&&s.channels.join()!==lastChannels){lastChannels=s.channels.join();sel.innerHTML=s.channels.map(c=>'<option'+(c===s.channel?' selected':'')+'>'+c+'</option>').join('');}
-  else if(sel.value!==s.channel){sel.value=s.channel;}
-  const sm=document.getElementById('smsMsg');
-  const qrHtml2=(s.qrPhase==='wait'&&s.qrUrl)?'<div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px"><img src="'+s.qrUrl+'" style="width:200px;height:200px;border-radius:10px;background:#fff;padding:8px"></div>':'';
-  const sl2=s.sliderUrl?'<br><a href="'+s.sliderUrl+'" target="_blank" style="color:var(--acc);font-weight:600">点此打开滑块验证页面</a>':'';
-  const wantSms=(s.smsMsg||' ')+(sl2||'')+(qrHtml2||'');
-  if(wantSms!==lastSmsHtml){lastSmsHtml=wantSms;sm.innerHTML=wantSms;}
-  if(lg.ts!==lastLogTs){lastLogTs=lg.ts;
-    document.getElementById('logs').innerHTML=lg.items.slice().reverse().map(e=>'<div class="lv-'+e.level+'"><span class="t">'+(e.local||e.ts.slice(11,19))+'</span>'+e.msg+(e.detail?'<div style="opacity:.55;word-break:break-all">'+e.detail+'</div>':'')+'</div>').join('');}
+   return '<div class="acc">'+av+'<div class="info"><div class="nick">'+(a.nick||'微信用户')+badge+'<span class="alias">标识 '+a.alias+'</span></div><div class="meta">'+a.wxid+(a.aliasWx?' · '+a.aliasWx:'')+(a.mobile?' · '+a.mobile.slice(0,3)+'****'+a.mobile.slice(-4):'')+'</div></div><div class="ops"><button class="small" onclick="accAct(&apos;relogin&apos;,&apos;&apos;+a.alias+&apos;,&apos;62 免扫码重登标识 &apos;+a.alias+&apos;?)">重登</button><button class="small" onclick="accAct(&apos;logout&apos;,&apos;&apos;+a.alias+&apos;,&apos;退出标识 &apos;+a.alias+&apos;?账号需重新扫码)">'+'退出'+'</button></div></div>';
+  }).join('');
+  if(accHtml!==lastAccHtml){lastAccHtml=accHtml;document.getElementById('accGrid').innerHTML=accHtml;}
+  if(modalOpen){
+   if(s.uuid&&s.uuid!==lastUuid){lastUuid=s.uuid;document.getElementById('qrArea').innerHTML='<img id="qr" src="/qr?ts='+Date.now()+'">';}
+   const sl=s.sliderUrl?'<br><img src="/slider-qr" style="width:150px;height:150px;border-radius:10px;background:#fff;padding:6px;margin-top:6px"><br><span style="font-size:12px">滑块:手机微信扫此码完成后点「重新取码」</span>':'';
+   const wt='<b>'+s.msg+'</b>'+sl;
+   if(wt!==lastTipHtml){lastTipHtml=wt;document.getElementById('qrTip').innerHTML=wt;}
+   const sel=document.getElementById('channel');
+   if(s.channels&&s.channels.join()!==lastChannels){lastChannels=s.channels.join();sel.innerHTML=s.channels.map(c=>'<option'+(c===s.channel?' selected':'')+'>'+c+'</option>').join('');}
+   const wantSms=(s.smsMsg||' ')+(s.sliderUrl?'<br><a href=&quot;'+s.sliderUrl+'&quot; target="_blank" style="color:var(--acc)">打开滑块验证页</a>':'');
+   if(wantSms!==lastSmsHtml){lastSmsHtml=wantSms;document.getElementById('smsMsg').innerHTML=wantSms;}
+   const sess=(lg.items||[]).filter(e=>e.ts>=sessStart);
+   const sh=sess.slice(-40).map(e=>'<div class="lv-'+e.level+'"><span class="t">'+(e.local||'').slice(11)+'</span>'+e.msg+'</div>').join('');
+   const sl2=document.getElementById('sessLogs');
+   if(sh&&sl2.innerHTML!==sh){sl2.innerHTML=sh;sl2.scrollTop=sl2.scrollHeight;}
+   if(s.phase==='ok'&&!doneShown){doneShown=true;const bar=document.getElementById('okBar');bar.style.display='block';bar.textContent='✅ '+s.msg;setTimeout(()=>{bar.style.display='none';closeModal();},2500);}
+  }
  }catch(e){}
  setTimeout(tick,3000);
 }
-let lastTipHtml='';
+fillCreds();tick();
+</script></body></html>`;
+
+/* ---------------- 全量日志独立页 ---------------- */
+const LOG_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>全量日志 · docker-wx</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#232833;--tx:#e6e9ef;--sub:#8b93a3;--ok:#3fb96f;--warn:#e0a23c;--err:#e05c5c;--acc:#4f8ef7}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC",sans-serif;padding:24px}
+.wrap{max-width:1000px;margin:0 auto}
+.hd{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+h1{font-size:18px;font-weight:600;flex:1}
+button{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+button.on{border-color:var(--acc);color:var(--acc)}
+#logs{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;max-height:calc(100vh - 130px);overflow-y:auto;font:12px/1.9 ui-monospace,Menlo,Consolas,monospace;color:var(--sub)}
+.lv-info{color:var(--tx)}.lv-warn{color:var(--warn)}.lv-error{color:var(--err)}.lv-debug{color:#5b6472}
+.t{color:#5b6472;margin-right:8px}
+.d{opacity:.55;word-break:break-all;margin-left:8px}
+.meta{color:var(--sub);font-size:12px;margin-bottom:8px}
+</style></head><body><div class="wrap">
+<div class="hd">
+<h1>事件日志(全部)</h1>
+<button data-lv="" class="on" onclick="setLv(this)">全部</button>
+<button data-lv="info" onclick="setLv(this)">info</button>
+<button data-lv="warn" onclick="setLv(this)">warn</button>
+<button data-lv="error" onclick="setLv(this)">error</button>
+<button id="pauseBtn" onclick="togglePause()">暂停滚动</button>
+<button onclick="location.href=&apos;/&apos;">返回账号管理</button>
+</div>
+<div class="meta" id="meta"></div>
+<div id="logs"></div>
+</div>
+<script>
+let lv='',paused=false,lastHtml='';
+function setLv(b){lv=b.getAttribute('data-lv');document.querySelectorAll('.hd button[data-lv]').forEach(x=>x.className='');b.className='on';lastHtml='';}
+function togglePause(){paused=!paused;document.getElementById('pauseBtn').className=paused?'on':'';document.getElementById('pauseBtn').textContent=paused?'恢复滚动':'暂停滚动';}
+async function tick(){
+ try{
+  const lg=await(await fetch('/logs')).json();
+  const items=(lg.items||[]).filter(e=>!lv||e.level===lv);
+  document.getElementById('meta').textContent='最近 '+items.length+' 条(上限 500,内存滚动)';
+  const h=items.map(e=>'<div class="lv-'+e.level+'"><span class="t">'+(e.local||e.ts)+'</span>'+e.msg+(e.detail?'<span class="d">'+e.detail+'</span>':'')+'</div>').join('');
+  const box=document.getElementById('logs');
+  if(h!==lastHtml){lastHtml=h;box.innerHTML=h;if(!paused)box.scrollTop=box.scrollHeight;}
+ }catch(e){}
+ setTimeout(tick,3000);
+}
 tick();
 </script></body></html>`;
 
@@ -599,6 +653,8 @@ http.createServer(async (req, res) => {
     if (!su) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('当前无滑块验证链接'); return; }
     const buf = await QRCode.toBuffer(su, { width: 240, margin: 2 });
     res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=30' }); res.end(buf);
+  } else if (req.method === 'GET' && url.pathname === '/logspage') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(LOG_PAGE);
   } else if (req.method === 'GET' && url.pathname === '/status') {
     json(200, JSON.parse(statusJson()));
   } else if (req.method === 'GET' && url.pathname === '/logs') {

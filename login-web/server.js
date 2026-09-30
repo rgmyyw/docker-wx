@@ -556,6 +556,33 @@ async function act(k,confirmMsg){if(confirmMsg&&!confirm(confirmMsg))return;toas
  try{const r=await(await fetch('/'+k,{method:'POST'})).json();toast(typeof r.msg==='string'?r.msg:(r.dingtalk||r.mail)?('钉钉:'+(r.dingtalk.ok?'成功':'失败')+' 邮件:'+(r.mail.ok?'成功':'失败')):'完成');}catch(e){toast('请求失败');}}
 </script></body></html>`;
 
+/* ---------------- smallcat 兼容层(QLScriptPublic wxapp 脚本取小程序 code) ----------------
+   协议:POST /wx/code {appid, openid} → {code} 或 {status:false, message};POST /wx/refresh → no-op
+   内部调 docker-wx /api/Wxapp/JSLogin(当前登录微信);openid 忽略(单账号),多账号时可扩展映射 */
+async function wxCodeCompat(body) {
+  const appid = body && body.appid;
+  if (!appid) return { status: false, message: '缺少 appid' };
+  const wxid = st.wxid || info.wxid;
+  if (!wxid) return { status: false, message: '微信未登录,请先在登录台扫码' };
+  try {
+    const res = await api('/api/Wxapp/JSLogin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Wxid: wxid, Appid: appid }),
+    });
+    const d = res.Data || {};
+    const code = d.Code || d.code || (d.Data && (d.Data.Code || d.Data.code));
+    if (res.Success && code) {
+      log('info', `小程序取码成功 appid=${appid}`);
+      return { code: String(code) };
+    }
+    log('warn', `小程序取码失败 appid=${appid}: ${res.Message}`);
+    return { status: false, message: res.Message || 'JSLogin 失败' };
+  } catch (e) {
+    log('error', `小程序取码异常 appid=${appid}: ${e.message}`);
+    return { status: false, message: e.message };
+  }
+}
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
@@ -602,6 +629,12 @@ http.createServer(async (req, res) => {
     try { fs.unlinkSync(CREDS_PATH); } catch {}
     log('info', '已清除记住的账号密码');
     json(200, { ok: true, msg: '已清除' });
+  } else if (req.method === 'POST' && url.pathname === '/wx/code') {
+    let b = ''; for await (const c of req) b += c;
+    let body = {}; try { body = JSON.parse(b || '{}'); } catch {}
+    json(200, await wxCodeCompat(body));
+  } else if (req.method === 'POST' && url.pathname === '/wx/refresh') {
+    json(200, { status: true });
   } else if (req.method === 'POST' && url.pathname === '/sms/qrapply') {
     json(200, await qrApply());
   } else if (req.method === 'POST' && url.pathname === '/sms/apply') {

@@ -55,6 +55,9 @@ services:
       - wx-login-data:/data
     depends_on:
       - wxapi
+    networks:
+      - default
+      - qinglong_net
     logging: *log
 
 volumes:

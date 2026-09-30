@@ -13,6 +13,7 @@ import (
 	"wechatdll/models/Login"
 
 	"github.com/bitly/go-simplejson"
+	"github.com/astaxie/beego"
 )
 
 // 登陆模块 支持二次 唤醒 62数据登陆(注意：代理必须使用SOCKS)
@@ -91,6 +92,10 @@ func (c *LoginController) LoginGetQRx() {
 // @Success 200
 // @router /GetQRPad [post]
 func (c *LoginController) LoginGetQRPad() {
+	// 安卓 Pad 版本可由 conf app.conf androidpadversion(十进制)覆盖;旧版 8.0.55 已被微信"版本过低"拒
+	if v, err := beego.AppConfig.Int64("androidpadversion"); err == nil && v > 0 {
+		Algorithm.AndroidPadVersion = int(v)
+	}
 	var GetQR Login.GetQRReq
 	data := c.Ctx.Input.RequestBody
 	err := json.Unmarshal(data, &GetQR)

@@ -76,7 +76,14 @@ let info = loadInfo();
 function loadInfo() { try { return JSON.parse(fs.readFileSync(INFO_PATH, 'utf8')); } catch { return {}; } }
 function saveInfo() { try { fs.writeFileSync(INFO_PATH, JSON.stringify(info, null, 2)); } catch {} }
 function genDeviceId() { let s = ''; for (let i = 0; i < 15; i++) s += Math.floor(Math.random() * 10); return s; }
-async function api(path, opt) { const r = await fetch(`${API}${path}`, opt); return r.json(); }
+async function api(path, opt) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(new Error('请求超时(60s)')), 60_000);
+  try {
+    const r = await fetch(`${API}${path}`, { ...opt, signal: ctl.signal });
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
 
 function deepFindWxid(obj, d = 0) {
   if (!obj || typeof obj !== 'object' || d > 5) return null;
@@ -277,7 +284,11 @@ async function smsApply(username, password) {
     sms.phase = 'idle'; sms.msg = ''; sms.sliderUrl = '';
     const cmsg = contentM && contentM[1] ? contentM[1] : (res.Message || '未知错误');
     return { ok: false, msg: `申请失败(ret=${retCode}): ${cmsg}` };
-  } catch (e) { sms.phase = 'idle'; sms.msg = ''; return { ok: false, msg: `请求失败: ${e.message}` }; }
+  } catch (e) {
+    sms.phase = 'idle'; sms.msg = `申请异常: ${e.message}`;
+    log('error', `短信登录:申请异常 ${e.message}`);
+    return { ok: false, msg: `申请异常: ${e.message}(服务端可能崩溃,查看 docker logs wxapi)` };
+  }
 }
 async function smsAgain() {
   if (!sms.againUrl) return { ok: false, msg: '尚未申请验证码' };

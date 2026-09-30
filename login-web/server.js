@@ -564,7 +564,7 @@ async function tick(){
   document.getElementById('summary').textContent=s.accounts.length?('共 '+s.accounts.length+' 个账号,'+on+' 个在线'):'';
   document.getElementById('empty').style.display=s.accounts.length?'none':'';
   const accHtml=s.accounts.map(a=>{
-   const av=a.headUrl?'<img src=&quot;'+a.headUrl+'&quot; onerror="this.style.visibility=&apos;hidden&apos;">':'<img style="visibility:hidden">';
+   const av=a.headUrl?'<img src="'+a.headUrl.replace(/"/g,'')+'" onerror="this.style.visibility=&apos;hidden&apos;">':'<img style="visibility:hidden">';
    const badge=a.offline?'<span class="badge off">掉线</span>':'<span class="badge on">在线</span>';
    return '<div class="acc">'+av+'<div class="info"><div class="nick">'+(a.nick||'微信用户')+badge+'<span class="alias">标识 '+a.alias+'</span></div><div class="meta">'+a.wxid+(a.aliasWx?' · '+a.aliasWx:'')+(a.mobile?' · '+a.mobile.slice(0,3)+'****'+a.mobile.slice(-4):'')+'</div></div><div class="ops"><button class="small" onclick="accAct(&apos;relogin&apos;,&apos;&apos;+a.alias+&apos;,&apos;62 免扫码重登标识 &apos;+a.alias+&apos;?)">重登</button><button class="small" onclick="accAct(&apos;logout&apos;,&apos;&apos;+a.alias+&apos;,&apos;退出标识 &apos;+a.alias+&apos;?账号需重新扫码)">'+'退出'+'</button></div></div>';
   }).join('');

@@ -269,10 +269,15 @@ setInterval(heartbeatAll, 2 * 60_000);
 /* 一键检测:立即对所有账号心跳并返回结果 */
 async function checkNow() {
   if (!accounts.length) return { ok: false, msg: '无账号' };
-  log('info', '手动触发全账号在线检测');
-  for (const acc of accounts) await heartbeat(acc);
+  log('info', `开始在线检测:共 ${accounts.length} 个账号`);
+  for (const acc of accounts) {
+    log('info', `[${acc.alias}] 检测 ${acc.nick || acc.wxid} …`);
+    await heartbeat(acc);
+  }
   const off = accounts.filter(a => a.offline).length;
-  return { ok: true, msg: `检测完成:${accounts.length} 个账号,${accounts.length - off} 在线${off ? ',' + off + ' 掉线' : ''}` };
+  const r = `检测完成:${accounts.length} 个账号,${accounts.length - off} 在线${off ? ',' + off + ' 掉线' : ''}`;
+  log(off ? 'error' : 'info', r);
+  return { ok: !off, msg: r };
 }
 
 /* ---------------- 二次登录/退出(按账号) ---------------- */
@@ -490,7 +495,7 @@ button.small{padding:5px 10px;font-size:12px}
 .foot{color:var(--sub);font-size:12px;text-align:center;margin-top:22px}
 .foot a{color:var(--acc);text-decoration:none}
 /* 弹窗 */
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+#modal,#checkModal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 .mbox{background:var(--card);border:1px solid var(--line);border-radius:16px;width:100%;max-width:430px;max-height:92vh;overflow-y:auto;padding:20px}
 .mhd{display:flex;align-items:center;margin-bottom:14px}
 .mhd b{font-size:16px;flex:1}
@@ -519,7 +524,7 @@ button.small{padding:5px 10px;font-size:12px}
 <span class="summary" id="summary"></span>
 <span class="sp"></span>
 <button class="primary" onclick="openModal()">＋ 添加账号</button>
-<button onclick="act(&apos;checknow&apos;,&apos;&apos;)">检测状态</button>
+<button onclick="openCheck()">检测状态</button>
 <button onclick="location.href=&apos;/logspage&apos;">全量日志</button>
 </div>
 <div class="grid" id="accGrid"></div>
@@ -550,6 +555,11 @@ button.small{padding:5px 10px;font-size:12px}
 </div>
 </div>
 <div class="sess"><h4>本次会话日志</h4><div id="sessLogs"><div style="color:#5b6472">等待操作…</div></div></div>
+</div></div>
+<div id="checkModal"><div class="mbox">
+<div class="mhd"><b>在线状态检测</b><button class="small" onclick="closeCheck()">关闭</button></div>
+<div class="success" id="checkBar"></div>
+<div id="checkLogs" style="max-height:300px;overflow-y:auto;font:12px/1.9 ui-monospace,Menlo,Consolas,monospace;color:var(--sub);background:#12141a;border-radius:8px;padding:10px">准备检测…</div>
 </div></div>
 <div id="toast"></div>
 
@@ -598,6 +608,7 @@ async function tick(){
    const sh=sess.slice(-40).map(e=>'<div class="lv-'+e.level+'"><span class="t">'+(e.local||'').slice(11)+'</span>'+e.msg+'</div>').join('');
    const sl2=document.getElementById('sessLogs');
    if(sh&&sl2.innerHTML!==sh){sl2.innerHTML=sh;sl2.scrollTop=sl2.scrollHeight;}
+   if(checkOpen){ renderCheckLogs(lg); }
    if(s.phase==='ok'&&!doneShown){doneShown=true;const bar=document.getElementById('okBar');bar.style.display='block';bar.textContent='✅ '+s.msg;setTimeout(()=>{bar.style.display='none';closeModal();},2500);}
   }
  }catch(e){}
@@ -611,6 +622,11 @@ document.getElementById('accGrid').addEventListener('click', function(e){
   if (act === 'relogin') { accAct('relogin', alias, ''); }
   if (act === 'logout') { if (confirm('退出标识 ' + alias + '?该号需重新扫码')) accAct('logout', alias, ''); }
 });
+let checkOpen=false,checkStart='',checkResult='';
+function renderCheckLogs(lg){const ck=(lg.items||[]).filter(e=>e.ts>=checkStart);const ch=ck.map(e=>'<div style="color:'+(e.level==='error'?'#e05c5c':e.level==='warn'?'#e0a23c':'#e6e9ef')+'"><span style="color:#5b6472;margin-right:6px">'+(e.local||'').slice(11)+'</span>'+e.msg+'</div>').join('');const cb2=document.getElementById('checkLogs');if(ch&&cb2&&cb2.innerHTML!==ch){cb2.innerHTML=ch;cb2.scrollTop=cb2.scrollHeight;}}
+function openCheck(){checkOpen=true;checkStart=new Date().toISOString();checkResult='';document.getElementById('checkBar').style.display='none';document.getElementById('checkModal').style.display='flex';document.getElementById('checkLogs').innerHTML='准备检测…';
+ fetch('/checknow',{method:'POST'}).then(r=>r.json()).then(j=>{checkResult=j.msg;const bar=document.getElementById('checkBar');bar.style.display='block';bar.style.background=j.ok?'rgba(63,185,111,.12)':'rgba(224,92,92,.12)';bar.style.borderColor=j.ok?'rgba(63,185,111,.4)':'rgba(224,92,92,.4)';bar.style.color=j.ok?'var(--ok)':'var(--err)';bar.textContent=(j.ok?'✅ ':'⚠️ ')+j.msg;setTimeout(()=>{fetch('/logs').then(r=>r.json()).then(renderCheckLogs);},400);}).catch(e=>{checkResult='检测请求失败:'+e.message;});}
+function closeCheck(){checkOpen=false;document.getElementById('checkModal').style.display='none';}
 fillCreds();tick();
 </script></body></html>`;
 

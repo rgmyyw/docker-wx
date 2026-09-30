@@ -54,7 +54,7 @@ var MacOsVersion = "11.5.2"
 var IPadVersion = 0x18003727  //ipad
 var IPadVersionx = 0x17012A21 //ipad绕过验证码0x17000523
 
-var IPhoneVersion = 0x2800373B //62IPhone 2026-09-30:8.0.55(0x18003727)已被微信"版本过低"拒绝,升 8.0.59(与 AndroidPadVersion 同值,服务端已验证接受)
+var IPhoneVersion = 0x1800373B //62IPhone 2026-09-30:8.0.55(0x18003727)被微信"版本过低"拒;0x18=iOS 前缀,0x3B=8.0.59(勿用安卓前缀 0x28,实测报 ret=-6)
 
 var AndroidVersion = 0x2800373B  //A16Android
 var AndroidVersion1 = 0x28003035 //A16Android848

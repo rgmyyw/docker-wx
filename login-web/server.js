@@ -568,7 +568,7 @@ async function tick(){
   const accHtml=s.accounts.map(a=>{
    const av=a.headUrl?'<img src="'+a.headUrl.replace(/"/g,'')+'" onerror="this.style.visibility=&apos;hidden&apos;">':'<img style="visibility:hidden">';
    const badge=a.offline?'<span class="badge off">掉线</span>':'<span class="badge on">在线</span>';
-   return '<div class="acc">'+av+'<div class="info"><div class="nick">'+(a.nick||'微信用户')+badge+'<span class="alias">标识 '+a.alias+'</span></div><div class="meta">'+a.wxid+(a.aliasWx?' · '+a.aliasWx:'')+(a.mobile?' · '+a.mobile.slice(0,3)+'****'+a.mobile.slice(-4):'')+'</div></div><div class="ops"><button class="small" data-act="relogin" data-alias="'+a.alias+'">重登</button><button class="small" data-act="logout" data-alias="'+a.alias+'">退出</button></div></div>';
+   return '<div class="acc">'+av+'<div class="info"><div class="nick">'+(a.nick||'微信用户')+badge+'<span class="alias">标识 '+a.alias+'</span></div><div class="meta">'+a.wxid+(a.aliasWx?' · '+a.aliasWx:'')+(a.mobile?' · '+a.mobile.slice(0,3)+'****'+a.mobile.slice(-4):'')+'</div></div><div class="ops">'+(a.offline?'<button class="small" data-act="hint">已掉线·扫码恢复</button>':'')+'<button class="small" data-act="logout" data-alias="'+a.alias+'">退出</button></div></div>';
   }).join('');
   if(accHtml!==lastAccHtml){lastAccHtml=accHtml;document.getElementById('accGrid').innerHTML=accHtml;}
   if(modalOpen){
@@ -593,6 +593,7 @@ document.getElementById('accGrid').addEventListener('click', function(e){
   var b = e.target.closest('button[data-act]');
   if (!b) return;
   var act = b.getAttribute('data-act'), alias = b.getAttribute('data-alias');
+  if (act === 'hint') { toast('62 免扫码恢复不可用:请点右上「添加账号」扫码恢复该号'); }
   if (act === 'relogin') { accAct('relogin', alias, ''); }
   if (act === 'logout') { if (confirm('退出标识 ' + alias + '?该号需重新扫码')) accAct('logout', alias, ''); }
 });

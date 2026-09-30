@@ -268,7 +268,8 @@ setInterval(heartbeatAll, 2 * 60_000);
 
 /* 一键检测:立即对所有账号心跳并返回结果 */
 async function checkNow() {
-  if (!accounts.length) return { ok: false, msg: '无账号' };
+  if (!accounts.length) return { ok: false, msg: '无账号', lines: [] };
+  const startIdx = LOGS.length;
   log('info', `开始在线检测:共 ${accounts.length} 个账号`);
   for (const acc of accounts) {
     log('info', `[${acc.alias}] 检测 ${acc.nick || acc.wxid} …`);
@@ -277,7 +278,7 @@ async function checkNow() {
   const off = accounts.filter(a => a.offline).length;
   const r = `检测完成:${accounts.length} 个账号,${accounts.length - off} 在线${off ? ',' + off + ' 掉线' : ''}`;
   log(off ? 'error' : 'info', r);
-  return { ok: !off, msg: r };
+  return { ok: !off, msg: r, lines: LOGS.slice(startIdx).map(e => ({ t: (e.local || '').slice(11), level: e.level, msg: e.msg })) };
 }
 
 /* ---------------- 二次登录/退出(按账号) ---------------- */
@@ -608,7 +609,6 @@ async function tick(){
    const sh=sess.slice(-40).map(e=>'<div class="lv-'+e.level+'"><span class="t">'+(e.local||'').slice(11)+'</span>'+e.msg+'</div>').join('');
    const sl2=document.getElementById('sessLogs');
    if(sh&&sl2.innerHTML!==sh){sl2.innerHTML=sh;sl2.scrollTop=sl2.scrollHeight;}
-   if(checkOpen){ renderCheckLogs(lg); }
    if(s.phase==='ok'&&!doneShown){doneShown=true;const bar=document.getElementById('okBar');bar.style.display='block';bar.textContent='✅ '+s.msg;setTimeout(()=>{bar.style.display='none';closeModal();},2500);}
   }
  }catch(e){}
@@ -623,9 +623,12 @@ document.getElementById('accGrid').addEventListener('click', function(e){
   if (act === 'logout') { if (confirm('退出标识 ' + alias + '?该号需重新扫码')) accAct('logout', alias, ''); }
 });
 let checkOpen=false,checkStart='',checkResult='';
-function renderCheckLogs(lg){const ck=(lg.items||[]).filter(e=>e.ts>=checkStart);const ch=ck.map(e=>'<div style="color:'+(e.level==='error'?'#e05c5c':e.level==='warn'?'#e0a23c':'#e6e9ef')+'"><span style="color:#5b6472;margin-right:6px">'+(e.local||'').slice(11)+'</span>'+e.msg+'</div>').join('');const cb2=document.getElementById('checkLogs');if(ch&&cb2&&cb2.innerHTML!==ch){cb2.innerHTML=ch;cb2.scrollTop=cb2.scrollHeight;}}
-function openCheck(){checkOpen=true;checkStart=new Date().toISOString();checkResult='';document.getElementById('checkBar').style.display='none';document.getElementById('checkModal').style.display='flex';document.getElementById('checkLogs').innerHTML='准备检测…';
- fetch('/checknow',{method:'POST'}).then(r=>r.json()).then(j=>{checkResult=j.msg;const bar=document.getElementById('checkBar');bar.style.display='block';bar.style.background=j.ok?'rgba(63,185,111,.12)':'rgba(224,92,92,.12)';bar.style.borderColor=j.ok?'rgba(63,185,111,.4)':'rgba(224,92,92,.4)';bar.style.color=j.ok?'var(--ok)':'var(--err)';bar.textContent=(j.ok?'✅ ':'⚠️ ')+j.msg;setTimeout(()=>{fetch('/logs').then(r=>r.json()).then(renderCheckLogs);},400);}).catch(e=>{checkResult='检测请求失败:'+e.message;});}
+function openCheck(){checkOpen=true;checkResult='';document.getElementById('checkBar').style.display='none';document.getElementById('checkModal').style.display='flex';document.getElementById('checkLogs').innerHTML='正在逐账号检测…';
+ fetch('/checknow',{method:'POST'}).then(r=>r.json()).then(j=>{
+  const bar=document.getElementById('checkBar');bar.style.display='block';bar.style.background=j.ok?'rgba(63,185,111,.12)':'rgba(224,92,92,.12)';bar.style.borderColor=j.ok?'rgba(63,185,111,.4)':'rgba(224,92,92,.4)';bar.style.color=j.ok?'var(--ok)':'var(--err)';bar.textContent=(j.ok?'✅ ':'⚠️ ')+j.msg;
+  const ch=(j.lines||[]).map(e=>'<div style="color:'+(e.level==='error'?'#e05c5c':e.level==='warn'?'#e0a23c':'#e6e9ef')+'"><span style="color:#5b6472;margin-right:6px">'+e.t+'</span>'+e.msg+'</div>').join('');
+  const cb=document.getElementById('checkLogs');if(ch){cb.innerHTML=ch;cb.scrollTop=cb.scrollHeight;}else{cb.textContent=j.msg;}
+ }).catch(e=>{document.getElementById('checkLogs').textContent='检测请求失败:'+e.message;});}
 function closeCheck(){checkOpen=false;document.getElementById('checkModal').style.display='none';}
 fillCreds();tick();
 </script></body></html>`;

@@ -13,6 +13,8 @@ import (
 	"wechatdll/lib"
 	"wechatdll/models"
 
+	"github.com/astaxie/beego"
+
 	"github.com/golang/protobuf/proto"
 )
 
@@ -372,6 +374,10 @@ func GenIpadLoginData(request Data62LoginReq) *comm.LoginData {
 }
 
 func GeniPhoneLoginData(request Data62LoginReq) *comm.LoginData {
+	// 62 登录版本号可由 conf/app.conf 的 iphoneversion(十进制)覆盖;微信会对旧版报"版本过低"
+	if v, err := beego.AppConfig.Int64("iphoneversion"); err == nil && v > 0 {
+		Algorithm.IPhoneVersion = int(v)
+	}
 	deviceId := lib.Get62Key(request.Data62)
 	if deviceId[:2] != "49" {
 		deviceId = "49" + deviceId[2:]

@@ -65,7 +65,7 @@ async function notify(title, text) {
 }
 
 /* ---------------- 状态与凭证 ---------------- */
-const st = { phase: 'boot', msg: '初始化', uuid: '', qrB64: '', qrTs: 0, expireTs: 0, wxid: '', nick: '', headUrl: '', deviceId: '', loginTime: '', lastHbOk: '', hbFails: 0, offlineNotified: false, channel: 'Pad', sliderUrl: '' };
+const st = { phase: 'boot', msg: '初始化', uuid: '', qrB64: '', qrTs: 0, expireTs: 0, wxid: '', nick: '', headUrl: '', alias: '', uin: '', mobile: '', deviceId: '', loginTime: '', lastHbOk: '', hbFails: 0, offlineNotified: false, channel: 'Pad', sliderUrl: '' };
 /* 取码通道:Pad=8.0.53 正式版;Padx=换版本号绕过 -106 验证;Pad1=云函数;Win/Mac=桌面端(风控策略不同) */
 const CHANNELS = {
   Pad: '/api/Login/GetQRPad', Padx: '/api/Login/GetQRPadx', Pad1: '/api/Login/GetQRPad1',
@@ -94,6 +94,23 @@ function deepFindWxid(obj, d = 0) {
     const r = deepFindWxid(v, d + 1); if (r) return r;
   }
   return null;
+}
+
+/* 拉取身份信息(昵称/头像/微信号/Uin/手机号) */
+async function fetchProfile() {
+  if (!st.wxid) return;
+  try {
+    const res = await api(`/api/Login/GetCacheInfo?wxid=${encodeURIComponent(st.wxid)}`, { method: 'POST' });
+    if (res.Success && res.Data) {
+      st.nick = res.Data.NickName || st.nick || '';
+      st.headUrl = res.Data.HeadUrl || st.headUrl || '';
+      st.alias = res.Data.Alais || st.alias || '';
+      st.uin = String(res.Data.Uin || st.uin || '');
+      st.mobile = res.Data.Mobile || st.mobile || '';
+      info.nick = st.nick; saveInfo();
+      log('info', `身份信息已刷新 昵称=${st.nick || '(空)'} 微信号=${st.alias || '(未设)'} Uin=${st.uin}`);
+    }
+  } catch (e) { log('warn', `身份信息拉取失败: ${e.message}`); }
 }
 
 /* ---------------- 取码 ---------------- */
@@ -139,9 +156,10 @@ async function poll() {
     const wxid = d.AcctSectResp?.UserName || deepFindWxid(d) || info.wxid || '';
     info.wxid = wxid; info.nick = d.AcctSectResp?.NickName || info.nick || '';
     info.loginTime = new Date().toISOString(); saveInfo();
-    Object.assign(st, { phase: 'ok', msg: '登录成功', wxid, nick: info.nick, loginTime: info.loginTime, lastHbOk: info.loginTime, hbFails: 0, offlineNotified: false });
-    log('info', `登录成功 wxid=${wxid} 昵称=${info.nick || '(未知)'}`);
-    return;
+      Object.assign(st, { phase: 'ok', msg: '登录成功', wxid, nick: info.nick, loginTime: info.loginTime, lastHbOk: info.loginTime, hbFails: 0, offlineNotified: false });
+      log('info', `登录成功 wxid=${wxid} 昵称=${info.nick || '(未知)'}`);
+      fetchProfile();
+      return;
   }
 
   const s = res.Data && (res.Data.status ?? res.Data.Status);
@@ -241,6 +259,7 @@ async function relogin(auto) {
     if (res.Success && wxid) {
       info.wxid = wxid; info.loginTime = new Date().toISOString(); saveInfo();
       Object.assign(st, { phase: 'ok', msg: auto ? '已自动恢复(62)' : '二次登录成功(62)', wxid, nick: info.nick, loginTime: info.loginTime, lastHbOk: info.loginTime, hbFails: 0, offlineNotified: false });
+      fetchProfile();
       return { ok: true, msg: `二次登录成功 ${wxid}` };
     }
     return { ok: false, msg: res.Message || '未知错误' };
@@ -389,6 +408,7 @@ async function smsVerify(code) {
   log('info', `login-web 启动 api=${API} 钉钉=${DING.webhook ? '已配置' : '未配置'} SMTP=${SMTP.user ? '已配置' : '未配置'}`);
   if (info.wxid) {
     Object.assign(st, { phase: 'ok', msg: '已登录(历史会话,待心跳确认)', wxid: info.wxid, nick: info.nick || '', loginTime: info.loginTime || '' });
+    fetchProfile();
     heartbeat();
   } else await newQR(true);
 })();
@@ -506,7 +526,9 @@ async function tick(){
   const body=document.getElementById('stateBody');
   const rows=(arr)=>arr.map(([k,v])=>'<div class="row"><span class="k">'+k+'</span><span class="v">'+(v||'—')+'</span></div>').join('');
   if(s.phase==='ok'){
-    body.innerHTML='<div class="ok-big">✔ '+s.msg+'</div>'+rows([['wxid',s.wxid],['昵称',s.nick],['登录时间',s.loginTime?new Date(s.loginTime).toLocaleString():''],['最后心跳',s.lastHbOk?new Date(s.lastHbOk).toLocaleString():'待确认'],['设备ID',s.deviceId]]);
+    const av=s.headUrl?'<img src="'+s.headUrl.replace(/"/g,'&quot;')+'" style="width:54px;height:54px;border-radius:27px;background:#fff" onerror="this.style.display=\'none\'">':'';
+    const maskMobile=s.mobile?s.mobile.slice(0,3)+'****'+s.mobile.slice(-4):'';
+    body.innerHTML='<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+av+'<div><div style="font-size:17px;font-weight:600">'+(s.nick||'微信用户')+'</div><div style="color:var(--sub);font-size:13px">'+(s.alias?'微信号:'+s.alias+' · ':'')+'Uin:'+(s.uin||'—')+'</div></div></div><div class="ok-big">✔ '+s.msg+'</div>'+rows([['wxid',s.wxid],['手机号',maskMobile],['登录时间',s.loginTime?new Date(s.loginTime).toLocaleString():''],['最后心跳',s.lastHbOk?new Date(s.lastHbOk).toLocaleString():'待确认'],['设备ID',s.deviceId]]);
     document.getElementById('qrArea').innerHTML='<div style="width:264px;height:264px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(63,185,111,.08);color:var(--ok);font-size:15px">已在线,无需扫码</div>';
   }else{
     const bad=(s.phase==='error'||s.phase==='offline');

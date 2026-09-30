@@ -70,7 +70,7 @@ const CHANNELS = {
   Win: '/api/Login/GetQRWin', Mac: '/api/Login/GetQRMac',
 };
 /* 短信验证登录(-106 解法):62dataSMSApply → 收码 → 62dataSMSVerify → 62data 完成 */
-const sms = { phase: 'idle', msg: '', checkUrl: '', againUrl: '', cookie: '', data62: '', username: '', password: '' };
+const sms = { phase: 'idle', msg: '', checkUrl: '', againUrl: '', cookie: '', data62: '', username: '', password: '', sliderUrl: '' };
 let info = loadInfo();
 function loadInfo() { try { return JSON.parse(fs.readFileSync(INFO_PATH, 'utf8')); } catch { return {}; } }
 function saveInfo() { try { fs.writeFileSync(INFO_PATH, JSON.stringify(info, null, 2)); } catch {} }
@@ -257,11 +257,22 @@ async function smsApply(username, password) {
       sms.checkUrl = res.Data.CheckUrl; sms.againUrl = res.Data.AgainUrl || ''; sms.cookie = res.Data.Cookie || '';
       sms.data62 = res.Data62 || '';
       sms.phase = 'applied'; sms.msg = '验证码已发送到该微信绑定的手机,请查收短信';
+      sms.sliderUrl = '';
       log('info', '短信登录:验证码已申请,等待用户输入');
       return { ok: true, msg: '验证码已发送,请输入收到的短信验证码' };
     }
-    sms.phase = 'idle'; sms.msg = '';
-    return { ok: false, msg: `申请失败: ${res.Message || '未知错误'}(检查账号密码是否正确)` };
+    // -106 环境检测:errMsg 带 Url = 滑块验证页,交给用户浏览器手动完成
+    const errMsgXml = (res.Data && res.Data.baseResponse && res.Data.baseResponse.errMsg && res.Data.baseResponse.errMsg.string) || '';
+    const retCode = res.Data && res.Data.baseResponse && res.Data.baseResponse.ret;
+    const um = errMsgXml.match(/<Url><!\[CDATA\[(.*?)\]\]><\/Url>/) || errMsgXml.match(/<Url>(.*?)<\/Url>/);
+    if (String(retCode) === '-106' && um && um[1]) {
+      sms.phase = 'slider'; sms.msg = '需滑块安全验证:点下方链接在浏览器完成验证,然后回来重新点「申请验证码」';
+      sms.sliderUrl = um[1];
+      log('warn', '短信登录:微信要求滑块验证(环境检测),验证链接已生成,待用户手动完成');
+      return { ok: false, msg: '需滑块安全验证:请点页面下方链接完成滑块,再回来重新申请' };
+    }
+    sms.phase = 'idle'; sms.msg = ''; sms.sliderUrl = '';
+    return { ok: false, msg: `申请失败(ret=${retCode}): ${res.Message}(检查账号密码是否正确)` };
   } catch (e) { sms.phase = 'idle'; sms.msg = ''; return { ok: false, msg: `请求失败: ${e.message}` }; }
 }
 async function smsAgain() {
@@ -316,7 +327,7 @@ async function smsVerify(code) {
 })();
 
 /* ---------------- HTTP ---------------- */
-function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString(), channels: Object.keys(CHANNELS), smsPhase: sms.phase, smsMsg: sms.msg }); }
+function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString(), channels: Object.keys(CHANNELS), smsPhase: sms.phase, smsMsg: sms.msg, sliderUrl: sms.sliderUrl }); }
 
 const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -434,7 +445,10 @@ async function tick(){
   const sel=document.getElementById('channel');
   if(s.channels&&s.channels.join()!==lastChannels){lastChannels=s.channels.join();sel.innerHTML=s.channels.map(c=>'<option'+(c===s.channel?' selected':'')+'>'+c+'</option>').join('');}
   else if(sel.value!==s.channel){sel.value=s.channel;}
-  if(s.smsMsg&&document.getElementById('smsMsg').textContent!==s.smsMsg)document.getElementById('smsMsg').textContent=s.smsMsg;
+  const sm=document.getElementById('smsMsg');
+  const sliderHtml=s.sliderUrl?'<a href="'+s.sliderUrl.replace(/"/g,'&quot;')+'" target="_blank" style="color:var(--acc);font-weight:600">👉 点此打开滑块验证页面(完成后回来重新申请)</a><br>':'';
+  const want=(s.smsMsg||'扫码被 -106 拦截时用此方式')+ (sliderHtml?'<br>'+sliderHtml:'');
+  if(sm.innerHTML!==want)sm.innerHTML=want;
  }catch(e){}
  setTimeout(tick,3000);
 }

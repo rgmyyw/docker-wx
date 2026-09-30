@@ -220,7 +220,11 @@ async function poll() {
     } else { st.msg = `登录被拒(-106): ${cm || '环境验证'}`; log('warn', '扫码 -106', brief(res).slice(0, 200)); }
     return;
   }
-  if (s === 1) { if (st.msg !== '已扫码,请在手机上点确认') log('info', 'CheckQR: 已扫码,等待确认'); st.msg = '已扫码,请在手机上点确认'; return; }
+  if (s === 1) {
+    if (st.msg !== '已扫码,请在手机上点确认') { log('info', 'CheckQR: 已扫码,等待确认'); st.expireTs = Math.max(st.expireTs, Date.now() + 3 * 60_000); }
+    st.msg = '已扫码,请在手机上点确认';
+    return;
+  }
   if (res.Code === 0 && res.Success) {
     st.msg = `等待扫码(登录新号${accounts.length ? `,已有 ${accounts.length} 个号` : ''})`;
     if (now - lastPollLog > 60_000) { log('debug', `CheckQR 轮询中 uuid=${st.uuid}`); lastPollLog = now; }

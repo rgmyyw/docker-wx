@@ -95,6 +95,9 @@ func IPadGetDeviceToken(DeviceId, DeviceType, DeviceName, OsVersion string, Vers
 	if Version == int32(Algorithm.IPadVersionx) {
 		hec.Init("IOS")
 	}
+	if Version == int32(Algorithm.IPhoneVersion) {
+		hec.Init("iPhone")
+	}
 	if Version == int32(Algorithm.WinVersion) {
 		hec.Init("Windows")
 	}

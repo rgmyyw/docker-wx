@@ -1,0 +1,66 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: wx-redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?请在 .env 设置 REDIS_PASSWORD}", "--appendonly", "yes"]
+    restart: always
+    mem_limit: 256m
+    volumes:
+      - wx-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: &log
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  wxapi:
+    build:
+      context: .
+      dockerfile: Dockerfile.http
+    image: docker-wx:latest
+    container_name: wxapi
+    restart: always
+    mem_limit: 512m
+    ports:
+      - "8057:8057"
+    volumes:
+      - ./conf/app.conf:/app/conf/app.conf
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - default
+      - qinglong_net
+    logging: *log
+
+  wxlogin:
+    image: node:22-alpine
+    container_name: wxlogin
+    restart: always
+    mem_limit: 192m
+    command: ["node", "/app/server.js"]
+    environment:
+      - wxapi_url=http://wxapi:8057
+      - TZ=Asia/Shanghai
+    ports:
+      - "8058:8058"
+    volumes:
+      - ./login-web:/app:ro
+      - wx-login-data:/data
+    depends_on:
+      - wxapi
+    logging: *log
+
+volumes:
+  wx-redis-data:
+  wx-login-data:
+
+networks:
+  qinglong_net:
+    name: qinglong_default
+    external: true

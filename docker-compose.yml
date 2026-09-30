@@ -39,18 +39,19 @@ services:
     logging: *log
 
   wxlogin:
-    image: node:22-alpine
+    build:
+      context: ./login-web
+    image: docker-wx-login:latest
     container_name: wxlogin
     restart: always
     mem_limit: 192m
-    command: ["node", "/app/server.js"]
+    env_file: .env
     environment:
       - wxapi_url=http://wxapi:8057
-      - TZ=Asia/Shanghai
+      - port=8058
     ports:
       - "8058:8058"
     volumes:
-      - ./login-web:/app:ro
       - wx-login-data:/data
     depends_on:
       - wxapi

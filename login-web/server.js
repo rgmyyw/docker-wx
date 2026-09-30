@@ -16,6 +16,7 @@ const QRCode = require('qrcode');
 const API = process.env.wxapi_url || 'http://wxapi:8057';
 const PORT = process.env.port || 8058;
 const INFO_PATH = process.env.info_path || '/data/login_info.json';
+const CREDS_PATH = '/data/sms_creds.json';
 const DEVICE_NAME = 'docker-wx-pad';
 const PAGE_URL = process.env.page_url || `http://192.168.100.10:${PORT}/`;
 
@@ -254,7 +255,8 @@ setInterval(poll, 3000);
 async function smsApply(username, password) {
   if (!username || !password) return { ok: false, msg: '请输入微信账号与密码' };
   sms.username = username; sms.password = password; sms.phase = 'applying'; sms.msg = '正在申请短信验证…';
-  log('info', `短信登录:申请验证(账号=${username.slice(0, 3)}***,密码不记录)`);
+  try { fs.writeFileSync(CREDS_PATH, JSON.stringify({ username, password }, null, 2)); } catch {}
+  log('info', `短信登录:申请验证(账号=${username.slice(0, 3)}***,密码不记录,已记住账号)`);
   try {
     const res = await api('/api/Login/62dataSMSApply', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -412,6 +414,7 @@ button.primary:hover{opacity:.88;color:#fff}
 <button class="primary" onclick="smsAct('verify')">验证并登录</button>
 <button onclick="smsAct('again')">重发验证码</button>
 <div id="smsMsg">扫码被 -106 拦截时用此方式:输入账号密码申请验证码,微信会发送短信到绑定手机</div>
+<div class="tip" style="margin-top:6px"><span id="credTip">账号密码将记住在服务端(调试用,</span><a style="color:var(--acc);cursor:pointer" onclick="forgetCreds()">清除</a><span id="credTip2">)</span></div>
 </div>
 </div></div>
 <div class="card"><h2>状态</h2><div id="stateBody"></div>
@@ -428,6 +431,9 @@ button.primary:hover{opacity:.88;color:#fff}
 <script>
 let lastUuid='';let lastLogTs='';let lastChannels='';let lastSmsHtml='';
 function switchTab(k){document.getElementById('tab-qr').style.display=k==='qr'?'':'none';document.getElementById('tab-sms').style.display=k==='sms'?'':'none';document.getElementById('tabBtn-qr').className='tab'+(k==='qr'?' active':'');document.getElementById('tabBtn-sms').className='tab'+(k==='sms'?' active':'');}
+async function fillCreds(){try{const c=await(await fetch('/sms/creds')).json();if(c.username&&c.password){document.getElementById('smsUser').value=c.username;document.getElementById('smsPass').value=c.password;}}catch(e){}}
+fillCreds();
+async function forgetCreds(){if(!confirm('清除记住的账号密码?'))return;try{await fetch('/sms/forget',{method:'POST'});document.getElementById('smsUser').value='';document.getElementById('smsPass').value='';toast('已清除');}catch(e){toast('失败');}}
 async function chgChannel(){const ch=document.getElementById('channel').value;if(!ch)return;toast('切换通道 '+ch+' …');
  try{const r=await(await fetch('/channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:ch})})).json();toast(r.msg);}catch(e){toast('请求失败');}}
 async function smsAct(k){
@@ -511,6 +517,13 @@ http.createServer(async (req, res) => {
     log('info', `手动切换取码通道 → ${ch}`);
     await newQR(true, `手动切换通道 ${ch}`);
     json(200, { ok: true, msg: `已切换到 ${ch} 通道并取新码` });
+  } else if (req.method === 'GET' && url.pathname === '/sms/creds') {
+    let c = {}; try { c = JSON.parse(fs.readFileSync(CREDS_PATH, 'utf8')); } catch {}
+    json(200, { username: c.username || '', password: c.password || '' });
+  } else if (req.method === 'POST' && url.pathname === '/sms/forget') {
+    try { fs.unlinkSync(CREDS_PATH); } catch {}
+    log('info', '已清除记住的账号密码');
+    json(200, { ok: true, msg: '已清除' });
   } else if (req.method === 'POST' && url.pathname === '/sms/apply') {
     let b = ''; for await (const c of req) b += c;
     const { username, password } = JSON.parse(b || '{}');

@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"github.com/astaxie/beego"
+	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -96,6 +97,7 @@ func WeChatSMS(Data string, ua string, proxyAddr string, proxyUser string, proxy
 	}
 	comm.HttpGet("https://shminorshort.weixin.qq.com/security/readtemplate?&ticket="+ticket+"&wechat_real_lang=zh_CN&idc="+idc+"&t=login_verify_entrances/entrances", headers, ua, proxyAddr, proxyUser, proxyPass)
 	step3Ret := comm.HttpGet("https://shminorshort.weixin.qq.com/security/secondauth?&ticket="+ticket+"&wechat_real_lang=zh_CN&idc="+idc+"&t=login_verify_entrances/entrances&step=1&sessionid="+sessionId, headers, ua, proxyAddr, proxyUser, proxyPass)
+	log.Infof("[WeChatSMS] step1 resp: %s", step3Ret)
 
 	var NewSessionIdJson SmsData
 	json.Unmarshal([]byte(step3Ret), &NewSessionIdJson)
@@ -103,11 +105,14 @@ func WeChatSMS(Data string, ua string, proxyAddr string, proxyUser string, proxy
 	sessionId = NewSessionIdJson.Sessionid
 	cc := NewSessionIdJson.Cc
 	Mobile := NewSessionIdJson.Mobile
+	log.Infof("[WeChatSMS] 解析结果 sessionid=%s cc=%s mobile=%s", sessionId, cc, Mobile)
 	headers = &map[string]string {
 		"Cookie": setCookie,
 	}
-	comm.HttpGet("https://shminorshort.weixin.qq.com/security/secondauth?&ticket="+ticket+"&wechat_real_lang=zh_CN&idc="+idc+"&t=login_verify_entrances/entrances&step=31&sessionid="+sessionId, headers, ua, proxyAddr, proxyUser, proxyPass)
-	comm.HttpGet("https://shminorshort.weixin.qq.com/security/readtemplate?t=login_verify_entrances/sms&&ticket="+ticket+"&wechat_real_lang=zh_CN&idc="+idc+"&type=down&cc="+cc+"&mobile="+Mobile, headers, ua, proxyAddr, proxyUser, proxyPass)
+	step31Ret := comm.HttpGet("https://shminorshort.weixin.qq.com/security/secondauth?&ticket="+ticket+"&wechat_real_lang=zh_CN&idc="+idc+"&t=login_verify_entrances/entrances&step=31&sessionid="+sessionId, headers, ua, proxyAddr, proxyUser, proxyPass)
+	smsDownRet := comm.HttpGet("https://shminorshort.weixin.qq.com/security/readtemplate?t=login_verify_entrances/sms&&ticket="+ticket+"&wechat_real_lang=zh_CN&idc="+idc+"&type=down&cc="+cc+"&mobile="+Mobile, headers, ua, proxyAddr, proxyUser, proxyPass)
+	log.Infof("[WeChatSMS] step31 resp: %s", step31Ret)
+	log.Infof("[WeChatSMS] sms-down resp: %s", smsDownRet)
 
 	checkUrl = "https://shminorshort.weixin.qq.com/security/secondauth?t=login_verify_entrances/sms&&ticket=" + ticket + "&wechat_real_lang=zh_CN&idc=" + idc + "&type=down&cc=" + cc + "&mobile=" + Mobile + "&sessionid=" + sessionId + "&step=32&verifycode=[[[verifycode]]]"
 	againUrl = "https://shminorshort.weixin.qq.com/security/secondauth?t=login_verify_entrances/sms&&ticket=" + ticket + 	"&wechat_real_lang=zh_CN&idc=" + idc + "&type=down&cc=" + cc + "&mobile=" + Mobile + "&sessionid=" + sessionId + "&step=31"

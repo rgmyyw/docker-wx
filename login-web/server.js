@@ -171,7 +171,7 @@ function addAccount(wxid, deviceId, data62) {
   let acc = accounts.find(a => a.wxid === wxid);
   if (acc) { // 同号重登:更新凭证
     acc.deviceId = deviceId || acc.deviceId; acc.data62 = data62 || acc.data62;
-    acc.loginTime = new Date().toISOString(); acc.lastHbOk = acc.loginTime; acc.hbFails = 0; acc.offlineNotified = false;
+    acc.loginTime = new Date().toISOString(); acc.lastHbOk = acc.loginTime; acc.hbFails = 0; acc.offlineNotified = false; acc.offline = false;
     persistAccount(acc); fetchProfile(acc);
     log('info', `[${acc.alias}] ${accLabel(acc)} 重新登录`);
     return acc;

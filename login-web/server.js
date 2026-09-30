@@ -526,7 +526,8 @@ async function tick(){
   const body=document.getElementById('stateBody');
   const rows=(arr)=>arr.map(([k,v])=>'<div class="row"><span class="k">'+k+'</span><span class="v">'+(v||'—')+'</span></div>').join('');
   if(s.phase==='ok'){
-    const av=s.headUrl?'<img src="'+s.headUrl.replace(/^http:\/\//,'https://').replace(/"/g,'&quot;')+'" style="width:54px;height:54px;border-radius:27px;background:#fff" onerror="this.style.display=\'none\'">':'';
+    const avUrl=s.headUrl?(s.headUrl.indexOf('http://')===0?'https://'+s.headUrl.slice(7):s.headUrl):'';
+    const av=avUrl?'<img src="'+avUrl.replace(/"/g,'&quot;')+'" style="width:54px;height:54px;border-radius:27px;background:#fff" onerror="this.style.display=&apos;none&apos;">':'';
     const maskMobile=s.mobile?s.mobile.slice(0,3)+'****'+s.mobile.slice(-4):'';
     body.innerHTML='<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+av+'<div><div style="font-size:17px;font-weight:600">'+(s.nick||'微信用户')+'</div><div style="color:var(--sub);font-size:13px">'+(s.alias?'微信号:'+s.alias+' · ':'')+'Uin:'+(s.uin||'—')+'</div></div></div><div class="ok-big">✔ '+s.msg+'</div>'+rows([['wxid',s.wxid],['手机号',maskMobile],['登录时间',s.loginTime?new Date(s.loginTime).toLocaleString():''],['最后心跳',s.lastHbOk?new Date(s.lastHbOk).toLocaleString():'待确认'],['设备ID',s.deviceId]]);
     document.getElementById('qrArea').innerHTML='<div style="width:264px;height:264px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(63,185,111,.08);color:var(--ok);font-size:15px">已在线,无需扫码</div>';

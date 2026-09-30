@@ -26,10 +26,11 @@ const SMTP = {
 
 /* ---------------- 事件日志(内存环形 120 条 + stdout) ---------------- */
 const LOGS = [];
+const fmtLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${d.toLocaleTimeString('zh-CN', { hour12: false })}`;
 function log(level, msg, detail) {
-  const e = { ts: new Date().toISOString(), level, msg, detail };
+  const e = { ts: new Date().toISOString(), local: fmtLocal(new Date()), level, msg, detail };
   LOGS.push(e); if (LOGS.length > 120) LOGS.shift();
-  const line = `[${e.ts.slice(11, 19)}][${level}] ${msg}${detail ? ` | ${detail}` : ''}`;
+  const line = `[${e.local}][${level}] ${msg}${detail ? ` | ${detail}` : ''}`;
   if (level === 'error') console.error(line); else console.log(line);
 }
 const brief = (o) => { try { const s = JSON.stringify(o); return s && s.length > 500 ? s.slice(0, 500) + '…' : s; } catch { return String(o); } };
@@ -62,7 +63,9 @@ async function notify(title, text) {
 }
 
 /* ---------------- 状态与凭证 ---------------- */
-const st = { phase: 'boot', msg: '初始化', uuid: '', qrB64: '', qrTs: 0, expireTs: 0, wxid: '', nick: '', headUrl: '', deviceId: '', loginTime: '', lastHbOk: '', hbFails: 0, offlineNotified: false };
+const st = { phase: 'boot', msg: '初始化', uuid: '', qrB64: '', qrTs: 0, expireTs: 0, wxid: '', nick: '', headUrl: '', deviceId: '', loginTime: '', lastHbOk: '', hbFails: 0, offlineNotified: false, channel: 'Pad' };
+/* 取码通道:Pad=8.0.53 正式版;Padx=换版本号绕过 -106 验证 */
+const CHANNELS = { Pad: '/api/Login/GetQRPad', Padx: '/api/Login/GetQRPadx' };
 let info = loadInfo();
 function loadInfo() { try { return JSON.parse(fs.readFileSync(INFO_PATH, 'utf8')); } catch { return {}; } }
 function saveInfo() { try { fs.writeFileSync(INFO_PATH, JSON.stringify(info, null, 2)); } catch {} }
@@ -83,7 +86,7 @@ async function newQR(force, reason) {
   if (st.phase === 'qr' && !force && Date.now() < st.expireTs) return;
   const deviceId = info.deviceId || genDeviceId();
   try {
-    const qr = await api('/api/Login/GetQRPad', {
+    const qr = await api(CHANNELS[st.channel] || CHANNELS.Pad, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ DeviceID: deviceId, DeviceName: DEVICE_NAME }),
     });
@@ -98,7 +101,7 @@ async function newQR(force, reason) {
       qrTs: Date.now(), expireTs: Date.now() + 4.5 * 60 * 1000, deviceId,
       wxid: info.wxid || '', loginTime: info.loginTime || '', hbFails: 0, offlineNotified: false,
     });
-    log('info', `取码成功 uuid=${qr.Data.Uuid} 本地过期=${new Date(st.expireTs).toLocaleTimeString()}${reason ? `(刷新原因:${reason})` : ''}`);
+    log('info', `取码成功 通道=${st.channel} uuid=${qr.Data.Uuid} 本地过期=${new Date(st.expireTs).toLocaleTimeString('zh-CN', { hour12: false })}${reason ? `(刷新原因:${reason})` : ''}`);
   } catch (e) {
     log('error', `取码异常: wxapi 不可达 ${e.message}`);
     Object.assign(st, { phase: 'error', msg: `wxapi 不可达: ${e.message}` });
@@ -148,6 +151,19 @@ async function poll() {
   if (res.Code === 0 && res.Success) { // status 0 = 未扫
     st.msg = '等待扫码';
     if (now - lastPollLog > 60_000) { log('debug', `CheckQR 轮询中(未扫码) uuid=${st.uuid}`); lastPollLog = now; }
+    return;
+  }
+  // -106:微信要求验证(风控/新设备),自动切换绕过验证码通道
+  const ret106 = res.Data && res.Data.baseResponse && (res.Data.baseResponse.ret ?? res.Data.baseResponse.Ret);
+  if (res.Message === '登陆异常' && ret106 === -106) {
+    if (st.channel === 'Pad') {
+      log('warn', '手机确认后微信要求验证(ret=-106),自动切换绕过验证码通道 GetQRPadx,请扫新码重试');
+      st.channel = 'Padx';
+      await newQR(true, 'ret=-106 切换绕过通道');
+    } else {
+      st.msg = '登录被要求验证(ret=-106):绕过通道也失败,该账号风控较严,建议稍后重试或换号';
+      log('error', '绕过通道(Padx)仍返回 -106', brief(res));
+    }
     return;
   }
   // 其它一切异常:如实显示,绝不静默换码
@@ -303,12 +319,12 @@ async function tick(){
     document.getElementById('qrArea').innerHTML='<div style="width:264px;height:264px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(63,185,111,.08);color:var(--ok);font-size:15px">已在线,无需扫码</div>';
   }else{
     const bad=(s.phase==='error'||s.phase==='offline');
-    body.innerHTML=(bad?'<div class="err-big">✘ '+s.msg+'</div>':'')+rows([['状态',s.msg],['wxid',s.wxid||'未登录'],['设备ID',s.deviceId],['二维码到期',s.expireTs?new Date(s.expireTs).toLocaleTimeString():'—'],['心跳失败次数',s.hbFails||0]]);
+    body.innerHTML=(bad?'<div class="err-big">✘ '+s.msg+'</div>':'')+rows([['状态',s.msg],['取码通道',s.channel],['wxid',s.wxid||'未登录'],['设备ID',s.deviceId],['二维码到期',s.expireTs?new Date(s.expireTs).toLocaleTimeString():'—'],['心跳失败次数',s.hbFails||0]]);
     document.getElementById('qrTip').innerHTML='<b>'+s.msg+'</b>';
     if(s.uuid&&s.uuid!==lastUuid){lastUuid=s.uuid;document.getElementById('qrArea').innerHTML='<img id="qr" src="/qr?ts='+Date.now()+'">';}
   }
   if(lg.ts!==lastLogTs){lastLogTs=lg.ts;
-    document.getElementById('logs').innerHTML=lg.items.slice().reverse().map(e=>'<div class="lv-'+e.level+'"><span class="t">'+e.ts.slice(11,19)+'</span>'+e.msg+(e.detail?'<div style="opacity:.55;word-break:break-all">'+e.detail+'</div>':'')+'</div>').join('');}
+    document.getElementById('logs').innerHTML=lg.items.slice().reverse().map(e=>'<div class="lv-'+e.level+'"><span class="t">'+(e.local||e.ts.slice(11,19))+'</span>'+e.msg+(e.detail?'<div style="opacity:.55;word-break:break-all">'+e.detail+'</div>':'')+'</div>').join('');}
  }catch(e){}
  setTimeout(tick,3000);
 }

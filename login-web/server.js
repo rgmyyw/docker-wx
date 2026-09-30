@@ -412,7 +412,7 @@ button.primary:hover{opacity:.88;color:#fff}
 <div class="foot">API: ${API} · 图片直链 <a style="color:var(--acc)" href="/qr" target="_blank">/qr</a> · 状态 <a style="color:var(--acc)" href="/status" target="_blank">/status</a> · 日志 <a style="color:var(--acc)" href="/logs" target="_blank">/logs</a></div>
 </div><div id="toast"></div>
 <script>
-let lastUuid='';let lastLogTs='';let lastChannels='';
+let lastUuid='';let lastLogTs='';let lastChannels='';let lastSmsHtml='';
 function switchTab(k){document.getElementById('tab-qr').style.display=k==='qr'?'':'none';document.getElementById('tab-sms').style.display=k==='sms'?'':'none';document.getElementById('tabBtn-qr').className='tab'+(k==='qr'?' active':'');document.getElementById('tabBtn-sms').className='tab'+(k==='sms'?' active':'');}
 async function chgChannel(){const ch=document.getElementById('channel').value;if(!ch)return;toast('切换通道 '+ch+' …');
  try{const r=await(await fetch('/channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:ch})})).json();toast(r.msg);}catch(e){toast('请求失败');}}
@@ -449,7 +449,7 @@ async function tick(){
   const sm=document.getElementById('smsMsg');
   const sliderHtml=s.sliderUrl?'<a href="'+s.sliderUrl.replace(/"/g,'&quot;')+'" target="_blank" style="color:var(--acc);font-weight:600">👉 点此打开滑块验证页面(完成后回来重新申请)</a><br><div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px"><img src="/slider-qr" style="width:180px;height:180px;border-radius:10px;background:#fff;padding:8px"><span style="color:var(--sub);font-size:12px">手机微信扫此码打开验证页(需在微信内完成)</span></div>':'';
   const want=(s.smsMsg||'扫码被 -106 拦截时用此方式')+ (sliderHtml?'<br>'+sliderHtml:'');
-  if(sm.innerHTML!==want)sm.innerHTML=want;
+  if(want!==lastSmsHtml){lastSmsHtml=want;sm.innerHTML=want;}
  }catch(e){}
  setTimeout(tick,3000);
 }
@@ -479,7 +479,7 @@ http.createServer(async (req, res) => {
   } else if (req.method === 'GET' && url.pathname === '/slider-qr') {
     if (!sms.sliderUrl) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('当前无滑块验证链接'); return; }
     const buf = await QRCode.toBuffer(sms.sliderUrl, { width: 240, margin: 2 });
-    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); res.end(buf);
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=30' }); res.end(buf);
   } else if (req.method === 'POST' && url.pathname === '/newqr') {
     await newQR(true, '手动重新取码'); json(200, { ok: true, msg: '已重新取码' });
   } else if (req.method === 'POST' && url.pathname === '/relogin') {

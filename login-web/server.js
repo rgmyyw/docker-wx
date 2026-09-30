@@ -566,7 +566,7 @@ async function tick(){
   const accHtml=s.accounts.map(a=>{
    const av=a.headUrl?'<img src="'+a.headUrl.replace(/"/g,'')+'" onerror="this.style.visibility=&apos;hidden&apos;">':'<img style="visibility:hidden">';
    const badge=a.offline?'<span class="badge off">掉线</span>':'<span class="badge on">在线</span>';
-   return '<div class="acc">'+av+'<div class="info"><div class="nick">'+(a.nick||'微信用户')+badge+'<span class="alias">标识 '+a.alias+'</span></div><div class="meta">'+a.wxid+(a.aliasWx?' · '+a.aliasWx:'')+(a.mobile?' · '+a.mobile.slice(0,3)+'****'+a.mobile.slice(-4):'')+'</div></div><div class="ops"><button class="small" onclick="accAct(&apos;relogin&apos;,&apos;&apos;+a.alias+&apos;,&apos;62 免扫码重登标识 &apos;+a.alias+&apos;?)">重登</button><button class="small" onclick="accAct(&apos;logout&apos;,&apos;&apos;+a.alias+&apos;,&apos;退出标识 &apos;+a.alias+&apos;?账号需重新扫码)">'+'退出'+'</button></div></div>';
+   return '<div class="acc">'+av+'<div class="info"><div class="nick">'+(a.nick||'微信用户')+badge+'<span class="alias">标识 '+a.alias+'</span></div><div class="meta">'+a.wxid+(a.aliasWx?' · '+a.aliasWx:'')+(a.mobile?' · '+a.mobile.slice(0,3)+'****'+a.mobile.slice(-4):'')+'</div></div><div class="ops"><button class="small" data-act="relogin" data-alias="'+a.alias+'">重登</button><button class="small" data-act="logout" data-alias="'+a.alias+'">退出</button></div></div>';
   }).join('');
   if(accHtml!==lastAccHtml){lastAccHtml=accHtml;document.getElementById('accGrid').innerHTML=accHtml;}
   if(modalOpen){
@@ -587,6 +587,13 @@ async function tick(){
  }catch(e){}
  setTimeout(tick,3000);
 }
+document.getElementById('accGrid').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-act]');
+  if (!b) return;
+  var act = b.getAttribute('data-act'), alias = b.getAttribute('data-alias');
+  if (act === 'relogin') { accAct('relogin', alias, ''); }
+  if (act === 'logout') { if (confirm('退出标识 ' + alias + '?该号需重新扫码')) accAct('logout', alias, ''); }
+});
 fillCreds();tick();
 </script></body></html>`;
 

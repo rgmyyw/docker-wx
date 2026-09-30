@@ -65,7 +65,7 @@ async function notify(title, text) {
 }
 
 /* ---------------- 状态与凭证 ---------------- */
-const st = { phase: 'boot', msg: '初始化', uuid: '', qrB64: '', qrTs: 0, expireTs: 0, wxid: '', nick: '', headUrl: '', deviceId: '', loginTime: '', lastHbOk: '', hbFails: 0, offlineNotified: false, channel: 'Pad' };
+const st = { phase: 'boot', msg: '初始化', uuid: '', qrB64: '', qrTs: 0, expireTs: 0, wxid: '', nick: '', headUrl: '', deviceId: '', loginTime: '', lastHbOk: '', hbFails: 0, offlineNotified: false, channel: 'Pad', sliderUrl: '' };
 /* 取码通道:Pad=8.0.53 正式版;Padx=换版本号绕过 -106 验证;Pad1=云函数;Win/Mac=桌面端(风控策略不同) */
 const CHANNELS = {
   Pad: '/api/Login/GetQRPad', Padx: '/api/Login/GetQRPadx', Pad1: '/api/Login/GetQRPad1',
@@ -114,7 +114,7 @@ async function newQR(force, reason) {
     Object.assign(st, {
       phase: 'qr', msg: '等待扫码', uuid: qr.Data.Uuid, qrB64: qr.Data.QrBase64,
       qrTs: Date.now(), expireTs: Date.now() + 4.5 * 60 * 1000, deviceId,
-      wxid: info.wxid || '', loginTime: info.loginTime || '', hbFails: 0, offlineNotified: false,
+      wxid: info.wxid || '', loginTime: info.loginTime || '', hbFails: 0, offlineNotified: false, sliderUrl: '',
     });
     log('info', `取码成功 通道=${st.channel} uuid=${qr.Data.Uuid} 本地过期=${new Date(st.expireTs).toLocaleTimeString('zh-CN', { hour12: false })}${reason ? `(刷新原因:${reason})` : ''}`);
   } catch (e) {
@@ -168,16 +168,22 @@ async function poll() {
     if (now - lastPollLog > 60_000) { log('debug', `CheckQR 轮询中(未扫码) uuid=${st.uuid}`); lastPollLog = now; }
     return;
   }
-  // -106:微信要求验证(风控/新设备),自动切换绕过验证码通道
+  // -106 分类处理:tcaptcha 滑块→展示给用户;版本过低→提示换通道;不再自动切 Padx(7.x 已被微信封)
   const ret106 = res.Data && res.Data.baseResponse && (res.Data.baseResponse.ret ?? res.Data.baseResponse.Ret);
   if (res.Message === '登陆异常' && ret106 === -106) {
-    if (st.channel === 'Pad') {
-      log('warn', '手机确认后微信要求验证(ret=-106),自动切换绕过验证码通道 GetQRPadx,请扫新码重试');
-      st.channel = 'Padx';
-      await newQR(true, 'ret=-106 切换绕过通道');
+    const em = (res.Data && res.Data.baseResponse && res.Data.baseResponse.errMsg && res.Data.baseResponse.errMsg.string) || '';
+    const um = em.match(/<Url><!\[CDATA\[(.*?)\]\]><\/Url>/) || em.match(/<Url>(.*?)<\/Url>/);
+    const cm = (em.match(/<Content><!\[CDATA\[(.*?)\]\]><\/Content>/) || em.match(/<Content>(.*?)<\/Content>/) || [])[1] || '';
+    if (um && um[1] && /shminorshort|captcha/.test(um[1])) {
+      st.msg = '需滑块验证:手机微信扫下方滑块码完成后,点「重新取码」再扫码登录';
+      st.sliderUrl = um[1];
+      log('warn', '扫码登录触发滑块验证,已展示验证码,完成后请重新取码再扫');
+    } else if (cm.includes('版本过低') || cm.includes('升级')) {
+      st.msg = `该通道版本已被微信封禁(${cm.slice(0, 20)}…),请用下拉切换通道`;
+      log('warn', `扫码 -106 版本过低`, brief(res).slice(0, 200));
     } else {
-      st.msg = '登录被要求验证(ret=-106):绕过通道也失败,该账号风控较严,建议稍后重试或换号';
-      log('error', '绕过通道(Padx)仍返回 -106', brief(res));
+      st.msg = `登录被拒(-106): ${cm || '环境验证'}`;
+      log('warn', '扫码 -106', brief(res).slice(0, 200));
     }
     return;
   }
@@ -388,7 +394,7 @@ async function smsVerify(code) {
 })();
 
 /* ---------------- HTTP ---------------- */
-function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString(), channels: Object.keys(CHANNELS), smsPhase: sms.phase, smsMsg: sms.msg, sliderUrl: sms.sliderUrl, qrPhase: sms.qrPhase, qrUrl: sms.qrUrl }); }
+function statusJson() { return JSON.stringify({ ...st, qrB64: undefined, serverTime: new Date().toISOString(), channels: Object.keys(CHANNELS), smsPhase: sms.phase, smsMsg: sms.msg, sliderUrl: (st.sliderUrl || sms.sliderUrl), qrPhase: sms.qrPhase, qrUrl: sms.qrUrl }); }
 
 const PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -505,7 +511,7 @@ async function tick(){
   }else{
     const bad=(s.phase==='error'||s.phase==='offline');
     body.innerHTML=(bad?'<div class="err-big">✘ '+s.msg+'</div>':'')+rows([['状态',s.msg],['取码通道',s.channel],['wxid',s.wxid||'未登录'],['设备ID',s.deviceId],['二维码到期',s.expireTs?new Date(s.expireTs).toLocaleTimeString():'—'],['心跳失败次数',s.hbFails||0]]);
-    document.getElementById('qrTip').innerHTML='<b>'+s.msg+'</b>';
+    document.getElementById('qrTip').innerHTML='<b>'+s.msg+'</b>'+(s.sliderUrl?'<div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px"><img src="/slider-qr" style="width:170px;height:170px;border-radius:10px;background:#fff;padding:6px"><span style="font-size:12px">滑块验证:手机微信扫此码并完成,然后点「重新取码」再扫登录码</span></div>':'');
     if(s.uuid&&s.uuid!==lastUuid){lastUuid=s.uuid;document.getElementById('qrArea').innerHTML='<img id="qr" src="/qr?ts='+Date.now()+'">';}
   }
   if(lg.ts!==lastLogTs){lastLogTs=lg.ts;
@@ -545,8 +551,9 @@ http.createServer(async (req, res) => {
   } else if (req.method === 'GET' && url.pathname === '/logs') {
     json(200, { ts: LOGS.length ? LOGS[LOGS.length - 1].ts : '', items: LOGS });
   } else if (req.method === 'GET' && url.pathname === '/slider-qr') {
-    if (!sms.sliderUrl) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('当前无滑块验证链接'); return; }
-    const buf = await QRCode.toBuffer(sms.sliderUrl, { width: 240, margin: 2 });
+    const su = st.sliderUrl || sms.sliderUrl;
+    if (!su) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('当前无滑块验证链接'); return; }
+    const buf = await QRCode.toBuffer(su, { width: 240, margin: 2 });
     res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=30' }); res.end(buf);
   } else if (req.method === 'POST' && url.pathname === '/newqr') {
     await newQR(true, '手动重新取码'); json(200, { ok: true, msg: '已重新取码' });

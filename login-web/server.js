@@ -446,7 +446,8 @@ async function wxCodeCompat(body) {
       if (res.Success && code) {
         if (i) log('info', `[${acc.alias}] 小程序取码成功(第${i + 1}次尝试) appid=${appid}`);
         else log('info', `[${acc.alias}] 小程序取码成功 appid=${appid}`);
-        return { status: true, code: String(code) };
+        // 平铺 code + 嵌套 data.code 双路径:脚本解析两种风格并存(提现免费券.py 只读 data.data.code,camel.js 等读 code || data.code)
+        return { status: true, code: String(code), data: { code: String(code) } };
       }
       const errCode = d.jsapiBaseresponse && d.jsapiBaseresponse.errcode;
       const err = (d.jsapiBaseresponse && (d.jsapiBaseresponse.errcode + ' ' + d.jsapiBaseresponse.errmsg)) || res.Message || '空code';

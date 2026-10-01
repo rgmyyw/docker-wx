@@ -446,7 +446,7 @@ async function wxCodeCompat(body) {
       if (res.Success && code) {
         if (i) log('info', `[${acc.alias}] 小程序取码成功(第${i + 1}次尝试) appid=${appid}`);
         else log('info', `[${acc.alias}] 小程序取码成功 appid=${appid}`);
-        return { code: String(code) };
+        return { status: true, code: String(code) };
       }
       const errCode = d.jsapiBaseresponse && d.jsapiBaseresponse.errcode;
       const err = (d.jsapiBaseresponse && (d.jsapiBaseresponse.errcode + ' ' + d.jsapiBaseresponse.errmsg)) || res.Message || '空code';

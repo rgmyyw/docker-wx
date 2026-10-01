@@ -430,10 +430,9 @@ async function wxCodeCompat(body) {
   const now = Date.now();
   const cd = codeCooldown[coolKey] || {};
   if (cd.until > now) {
-    const left = Math.ceil((cd.until - now) / 1000);
-    return { status: false, message: cd.freq ? `微信限频冷却中(约${Math.ceil(left/60)}分钟),稍后自动恢复` : `取码防抖(${left}s),勿短时重复触发` };
+    const left = Math.ceil((cd.until - now) / 60_000);
+    return { status: false, message: `微信限频冷却中(约${left}分钟),稍后自动恢复` };
   }
-  codeCooldown[coolKey] = { until: now + 30_000, freq: false };  // 防抖 30s:挡连打,放过脚本内短间隔重试
   let lastMsg = '';
   for (let i = 0; i < 3; i++) {
     if (i) await new Promise(r => setTimeout(r, 6000));

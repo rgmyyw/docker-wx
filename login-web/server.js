@@ -305,6 +305,7 @@ function pickAcc(aliasOrWxid) {
 }
 
 /* ---------------- 短信登录(独立,成功即 addAccount) ---------------- */
+const codeCooldown = {}; // wxid|appid -> 上次取码时间(限频冷却)
 const sms = { phase: 'idle', msg: '', checkUrl: '', againUrl: '', cookie: '', data62: '', username: '', password: '', sliderUrl: '', qrPhase: '', qrUrl: '', qrCheck: '' };
 async function smsApply(username, password) {
   if (!username || !password) return { ok: false, msg: '请输入微信账号与密码' };
@@ -423,10 +424,17 @@ async function wxCodeCompat(body) {
     if (!acc) return { status: false, message: `标识 ${key} 未登录(现有标识:${accounts.map(a => a.alias).join(',') || '无'})` };
   } else acc = accounts[0];
   if (!acc) return { status: false, message: '无已登录微信,请先在登录台扫码' };
-  // 空 code 多为微信对同账号+同 appid 的短时限频,间隔重试
+  // 空 code 多为微信对同账号+同 appid 的短时限频(-13000),间隔重试
+  // 同账号+同 appid 90 秒冷却:拒绝连打,防止限频雪上加霜
+  const coolKey = acc.wxid + '|' + appid;
+  const now = Date.now();
+  if (codeCooldown[coolKey] && now - codeCooldown[coolKey] < 90_000) {
+    return { status: false, message: '同账号对该小程序取码冷却中(90s),请勿短时重复触发' };
+  }
+  codeCooldown[coolKey] = now;
   let lastMsg = '';
   for (let i = 0; i < 3; i++) {
-    if (i) await new Promise(r => setTimeout(r, 2200));
+    if (i) await new Promise(r => setTimeout(r, 6000));
     try {
       const res = await api('/api/Wxapp/JSLogin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

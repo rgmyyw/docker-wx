@@ -428,10 +428,12 @@ async function wxCodeCompat(body) {
   // 同账号+同 appid 90 秒冷却:拒绝连打,防止限频雪上加霜
   const coolKey = acc.wxid + '|' + appid;
   const now = Date.now();
-  if (codeCooldown[coolKey] && now - codeCooldown[coolKey] < 90_000) {
-    return { status: false, message: '同账号对该小程序取码冷却中(90s),请勿短时重复触发' };
+  const cd = codeCooldown[coolKey] || {};
+  if (cd.until > now) {
+    const left = Math.ceil((cd.until - now) / 1000);
+    return { status: false, message: cd.freq ? `微信限频冷却中(约${left}s 后自动恢复),请勿短时重复触发` : `取码防抖冷却中(${left}s)` };
   }
-  codeCooldown[coolKey] = now;
+  codeCooldown[coolKey] = { until: now + 90_000, freq: false };
   let lastMsg = '';
   for (let i = 0; i < 3; i++) {
     if (i) await new Promise(r => setTimeout(r, 6000));
@@ -447,8 +449,15 @@ async function wxCodeCompat(body) {
         else log('info', `[${acc.alias}] 小程序取码成功 appid=${appid}`);
         return { code: String(code) };
       }
+      const errCode = d.jsapiBaseresponse && d.jsapiBaseresponse.errcode;
       const err = (d.jsapiBaseresponse && (d.jsapiBaseresponse.errcode + ' ' + d.jsapiBaseresponse.errmsg)) || res.Message || '空code';
       lastMsg = `${res.Message || ''} jsapi=${err}`;
+      if (String(errCode) === '-13000') {
+        // 微信限频:冷却 15 分钟并立即放弃重试(重试只会续杯限频)
+        codeCooldown[coolKey] = { until: Date.now() + 15 * 60_000, freq: true };
+        log('warn', `[${acc.alias}] 取码触发微信限频(-13000),该组合冷却 15 分钟 appid=${appid}`);
+        return { status: false, message: '微信限频(-13000),已进入 15 分钟冷却' };
+      }
       log('warn', `[${acc.alias}] 小程序取码空code(尝试${i + 1}/3) appid=${appid}: ${lastMsg}`);
     } catch (e) { lastMsg = e.message; log('error', `[${acc.alias}] 取码异常(尝试${i + 1}/3): ${e.message}`); }
   }

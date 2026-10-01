@@ -423,20 +423,28 @@ async function wxCodeCompat(body) {
     if (!acc) return { status: false, message: `标识 ${key} 未登录(现有标识:${accounts.map(a => a.alias).join(',') || '无'})` };
   } else acc = accounts[0];
   if (!acc) return { status: false, message: '无已登录微信,请先在登录台扫码' };
-  try {
-    const res = await api('/api/Wxapp/JSLogin', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Wxid: acc.wxid, Appid: appid }),
-    });
-    const d = res.Data || {};
-    const code = d.Code || d.code || (d.Data && (d.Data.Code || d.Data.code));
-    if (res.Success && code) {
-      log('info', `[${acc.alias}] 小程序取码成功 appid=${appid}`);
-      return { code: String(code) };
-    }
-    log('warn', `[${acc.alias}] 小程序取码失败 appid=${appid}: ${res.Message}`);
-    return { status: false, message: res.Message || 'JSLogin 失败' };
-  } catch (e) { return { status: false, message: e.message }; }
+  // 空 code 多为微信对同账号+同 appid 的短时限频,间隔重试
+  let lastMsg = '';
+  for (let i = 0; i < 3; i++) {
+    if (i) await new Promise(r => setTimeout(r, 2200));
+    try {
+      const res = await api('/api/Wxapp/JSLogin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Wxid: acc.wxid, Appid: appid }),
+      });
+      const d = res.Data || {};
+      const code = d.Code || d.code || (d.Data && (d.Data.Code || d.Data.code));
+      if (res.Success && code) {
+        if (i) log('info', `[${acc.alias}] 小程序取码成功(第${i + 1}次尝试) appid=${appid}`);
+        else log('info', `[${acc.alias}] 小程序取码成功 appid=${appid}`);
+        return { code: String(code) };
+      }
+      const err = (d.jsapiBaseresponse && (d.jsapiBaseresponse.errcode + ' ' + d.jsapiBaseresponse.errmsg)) || res.Message || '空code';
+      lastMsg = `${res.Message || ''} jsapi=${err}`;
+      log('warn', `[${acc.alias}] 小程序取码空code(尝试${i + 1}/3) appid=${appid}: ${lastMsg}`);
+    } catch (e) { lastMsg = e.message; log('error', `[${acc.alias}] 取码异常(尝试${i + 1}/3): ${e.message}`); }
+  }
+  return { status: false, message: `取码失败: ${lastMsg}` };
 }
 
 /* ---------------- 启动 ---------------- */

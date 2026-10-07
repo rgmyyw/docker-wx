@@ -314,29 +314,33 @@ function pickAcc(aliasOrWxid) {
 /* ---------------- JSLogin 统一闸门 ----------------
    微信对 js-login 按【微信号】限频,额度跨小程序共享(jingjianx 同号 12s 连登 5 店后,
    该号换任何小程序取码全 -13000 的实证)。策略:同 wxid 串行 + 令牌桶(短期 3/20s、
-   长期 8/10min)+ 超发排队 12s 后干净失败(不把额度打爆进冷却);-13000 = 整号 15 分钟
-   快速失败(冷却期内换 appid 也拒发,不再白烧额度)。
+   长期 8/10min)+ 满桶排队最长 12s 后照发(排队本身就是拉平,不硬拒);
+   -13000 = 自适应探测冷却:60s 后放行探测,成功立即恢复,失败指数退避(×2,封顶 10min)
+   ——微信不公布惩罚时长,恢复时间由探测自动发现,不人为设固定冷却。
    注:code 是一次性消费品(业务后端 jscode2session 即作废),不可跨登录复用;
    唯一安全复用 = 微信官方 getallphone 返回的配对 code(见 /wx/getphonenumber)。 */
-const jsGate = {};         // wxid -> { tail, times[], coolUntil }
+const jsGate = {};         // wxid -> { tail, times[], cool:{nextProbe,step}|null }
 const JS_MIN_GAP = 1500;       // 同微信号两次 js-login 最小间隔
 const JS_WIN1_MS = 20_000, JS_WIN1_MAX = 3;        // 短期突发上限
 const JS_WIN2_MS = 600_000, JS_WIN2_MAX = 8;       // 长期总量上限
-const JS_QUEUE_WAIT = 12_000;   // 令牌桶满时最长排队(脚本侧 HTTP 超时多为 15s+)
+const JS_QUEUE_WAIT = 12_000;   // 令牌桶满时最长排队(排队即拉平,超时照发;脚本侧 HTTP 超时多为 15s+)
+const JS_PROBE_BASE = 60_000;   // -13000 后首次探测延迟
+const JS_PROBE_CAP = 600_000;   // 探测退避封顶
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function gateOf(wxid) {
-  if (!jsGate[wxid]) jsGate[wxid] = { tail: Promise.resolve(), times: [], coolUntil: 0 };
+  if (!jsGate[wxid]) jsGate[wxid] = { tail: Promise.resolve(), times: [], cool: null };
   return jsGate[wxid];
 }
 
-/* 所有 JSLogin 必经:按 wxid 串行 + 节流;整号冷却中抛 {gate:true,message} */
+/* 所有 JSLogin 必经:按 wxid 串行 + 节流;探测冷却未到时抛 {gate:true,message}
+   (冷却到期后放行本请求即探测,成功即恢复) */
 function jsLoginViaGate(acc, appid) {
   const st = gateOf(acc.wxid);
   const run = (async () => {
-    if (st.coolUntil > Date.now()) {
-      const left = Math.ceil((st.coolUntil - Date.now()) / 60_000);
-      throw { gate: true, message: `微信限频冷却中(约剩${left}分钟),该微信号全部小程序取码暂停` };
+    if (st.cool && st.cool.nextProbe > Date.now()) {
+      const left = Math.ceil((st.cool.nextProbe - Date.now()) / 1000);
+      throw { gate: true, message: `微信限频中,${left} 秒后自动探测恢复(探测成功即解除)` };
     }
     const last = st.times[st.times.length - 1];
     if (last) await sleep(Math.max(0, JS_MIN_GAP - (Date.now() - last)));
@@ -364,13 +368,19 @@ function parseJsLogin(acc, appid, res) {
   const code = d.code || d.Code || (d.Data && (d.Data.code || d.Data.Code));
   const sk = d.sessionKey || d.SessionKey || (d.Data && (d.Data.sessionKey || d.Data.SessionKey));
   const openid = d.openid || d.Openid;
-  if (res.Success && code) return { ok: true, code: String(code), sk: sk ? String(sk) : '', openid: openid ? String(openid) : '' };
+  const g = gateOf(acc.wxid);
+  if (res.Success && code) {
+    if (g.cool) { log('info', `[${acc.alias}] 微信限频已恢复(探测成功),冷却解除`); g.cool = null; }
+    return { ok: true, code: String(code), sk: sk ? String(sk) : '', openid: openid ? String(openid) : '' };
+  }
   const errCode = d.jsapiBaseresponse && d.jsapiBaseresponse.errcode;
   const err = (d.jsapiBaseresponse && (d.jsapiBaseresponse.errcode + ' ' + d.jsapiBaseresponse.errmsg)) || res.Message || '空code';
   if (String(errCode) === '-13000') {
-    gateOf(acc.wxid).coolUntil = Date.now() + 15 * 60_000;
-    log('warn', `[${acc.alias}] js-login 触发微信限频(-13000),微信号进入 15 分钟冷却(appid=${appid})`);
-    return { ok: false, freq: true, message: '微信限频(-13000),该微信号已进入 15 分钟冷却(冷却期内所有小程序取码暂停)' };
+    const step = (g.cool && g.cool.step) || 0;
+    const waitMs = Math.min(JS_PROBE_BASE * 2 ** step, JS_PROBE_CAP);
+    g.cool = { nextProbe: Date.now() + waitMs, step: step + 1 };
+    log('warn', `[${acc.alias}] js-login 微信限频(-13000),${Math.round(waitMs / 1000)}秒后放行探测(appid=${appid})`);
+    return { ok: false, freq: true, message: `微信限频(-13000),${Math.round(waitMs / 1000)} 秒后自动探测恢复` };
   }
   return { ok: false, message: `${res.Message || ''} jsapi=${err}` };
 }

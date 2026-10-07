@@ -781,7 +781,6 @@ tr:hover td.l{background:#1b2029}
  .tabs{gap:6px;margin:6px 0}
  .stat{gap:8px;margin-bottom:4px;font-size:11px}
  .legend{font-size:11px;line-height:1.9;margin-bottom:6px}
- #tableWrap{max-height:60vh}
  th,td{padding:5px 4px!important;font-size:12px}
  th{font-size:11px}
 }

@@ -797,6 +797,7 @@ function render(){
  if(!data)return;
  const scripts=Object.entries(data.scripts||{});
  const aliases=[...new Set(scripts.flatMap(([,v])=>Object.keys(v.per||{})))].sort();
+ const disp=a=>{const m=(data.aliases||{})[a];return (m&&(m.wx||m.nick))||a;};
  document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 来自每日任务执行日志(20:05 采集)';
  let rows=scripts.filter(([k,v])=>{
    if(filter!=='unreg')return true;
@@ -807,7 +808,7 @@ function render(){
  scripts.forEach(([k,v])=>Object.values(v.per||{}).forEach(x=>{if(x==='ok')ok++;else if(x==='unreg')un++;else if(x==='fail')fl++;}));
  document.getElementById('stat').innerHTML='<span>✅ 已注册: <b>'+ok+'</b></span><span>❌ 未注册: <b>'+un+'</b></span><span>⚠️ 其他失败: <b>'+fl+'</b></span><span>➖ 无数据: <b>'+(scripts.length?scripts.filter(([k,v])=>!Object.keys(v.per||{}).length).length:0)+'</b></span><span>脚本数: <b>'+scripts.length+'</b></span>';
  if(tab==='m'){
-   let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th>'+a+'</th>').join('')+'</tr>';
+   let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th title="标识 '+a+'">'+disp(a)+'</th>').join('')+'</tr>';
    for(const [k,v] of rows){
      h+='<tr><td class="l">'+(v.name||k)+'</td>'+aliases.map(a=>'<td>'+fmtPer((v.per||{})[a])+'</td>').join('')+'</tr>';
    }
@@ -818,7 +819,7 @@ function render(){
      const mine=scripts.filter(([k,v])=>(v.per||{}).hasOwnProperty(a));
      const myOk=mine.filter(([k,v])=>v.per[a]==='ok').length;
      const myUn=mine.filter(([k,v])=>v.per[a]==='unreg').length;
-     h+='<div class="acc-card"><div><div class="big">账号 '+a+'</div><div style="color:var(--sub);font-size:12px">已注册 '+myOk+' · 未注册 '+myUn+' · 共 '+mine.length+'</div></div>';
+     h+='<div class="acc-card"><div><div class="big">'+disp(a)+'</div><div style="color:var(--sub);font-size:12px">标识 '+a+' · 已注册 '+myOk+' · 未注册 '+myUn+' · 共 '+mine.length+'</div></div>';
      if(myUn){
        h+='<div style="flex:1;min-width:280px"><div style="font-size:12px;color:var(--sub)">未注册清单:</div><div style="font-size:12px;color:var(--warn)">'+mine.filter(([k,v])=>v.per[a]==='unreg').map(([k,v])=>v.name||k).slice(0,60).join('、')+'</div></div>';
      } else h+='<div style="color:var(--ok)">全部已注册 ✓</div>';
@@ -917,7 +918,10 @@ http.createServer(async (req, res) => {
     log('info', `注册状态上报:${(Array.isArray(b) ? b : []).length} 个脚本`);
     json(200, { ok: true });
   } else if (req.method === 'GET' && url.pathname === '/registry') {
-    json(200, loadReg());
+    const reg = loadReg();
+    const amap = {};
+    for (const a of accounts) amap[a.alias] = { wx: a.aliasWx || '', nick: a.nick || '', mobile: a.mobile || '' };
+    json(200, { ...reg, aliases: amap });
   } else if (req.method === 'GET' && url.pathname === '/registrypage') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(REG_PAGE);
   } else if (req.method === 'POST' && url.pathname === '/checknow') {

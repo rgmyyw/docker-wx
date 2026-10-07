@@ -797,7 +797,7 @@ function render(){
  if(!data)return;
  const scripts=Object.entries(data.scripts||{});
  const aliases=[...new Set(scripts.flatMap(([,v])=>Object.keys(v.per||{})))].sort();
- const disp=a=>{const m=(data.aliases||{})[a];return (m&&(m.wx||m.nick))||a;};
+ const disp=a=>{const m=(data.aliases||{})[a];if(!m)return a;return m.mobile?m.mobile.slice(0,3)+'****'+m.mobile.slice(-4):(m.wx||m.nick||a);};
  document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 来自每日任务执行日志(20:05 采集)';
  let rows=scripts.filter(([k,v])=>{
    if(filter!=='unreg')return true;

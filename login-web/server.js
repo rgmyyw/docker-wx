@@ -754,7 +754,7 @@ const REG_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC",sans-serif;padding:22px}
 .wrap{max-width:1100px;margin:0 auto}
-.hd{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 h1{font-size:19px;font-weight:600;flex:1}
 .hd .meta{color:var(--sub);font-size:12px;width:100%}
 button{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
@@ -762,7 +762,9 @@ button.on{border-color:var(--acc);color:var(--acc)}
 .tabs{display:flex;gap:8px;margin:10px 0}
 .stat{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-bottom:10px;flex-wrap:wrap}
 .stat b{color:var(--tx)}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+#tableWrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px}
+table{width:100%;border-collapse:collapse;background:var(--card)}
+@media(max-width:640px){th,td{padding:6px 6px!important;font-size:12px}th{font-size:11px}button{padding:9px 14px;font-size:13px}body{padding-bottom:40px}}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center;font-size:13px}
 th{color:var(--sub);font-weight:600;font-size:12px;background:#141822}
 td.l{text-align:left}
@@ -808,11 +810,12 @@ function render(){
  scripts.forEach(([k,v])=>Object.values(v.per||{}).forEach(x=>{if(x==='ok')ok++;else if(x==='unreg')un++;else if(x==='fail')fl++;}));
  document.getElementById('stat').innerHTML='<span>✅ 已注册: <b>'+ok+'</b></span><span>❌ 未注册: <b>'+un+'</b></span><span>⚠️ 其他失败: <b>'+fl+'</b></span><span>➖ 无数据: <b>'+(scripts.length?scripts.filter(([k,v])=>!Object.keys(v.per||{}).length).length:0)+'</b></span><span>脚本数: <b>'+scripts.length+'</b></span>';
  if(tab==='m'){
-   let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th title="标识 '+a+'">'+disp(a)+'</th>').join('')+'</tr>';
+   const short = window.matchMedia('(max-width:640px)').matches;
+   let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th title="'+disp(a)+'">'+(short && (data.aliases||{})[a] && (data.aliases||{})[a].mobile ? (data.aliases||{})[a].mobile.slice(-4) : disp(a))+'</th>').join('')+'</tr>';
    for(const [k,v] of rows){
      h+='<tr><td class="l">'+(v.name||k)+'</td>'+aliases.map(a=>'<td>'+fmtPer((v.per||{})[a])+'</td>').join('')+'</tr>';
    }
-   document.getElementById('body').innerHTML=h+'</table>'||'<div class="empty">无数据</div>';
+   document.getElementById('body').innerHTML='<div id="tableWrap">'+h+'</table></div>';
  }else{
    let h='';
    for(const a of aliases){

@@ -762,13 +762,29 @@ button.on{border-color:var(--acc);color:var(--acc)}
 .tabs{display:flex;gap:8px;margin:10px 0}
 .stat{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-bottom:10px;flex-wrap:wrap}
 .stat b{color:var(--tx)}
-#tableWrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px}
+#tableWrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px}
 table{width:100%;border-collapse:collapse;background:var(--card)}
-@media(max-width:640px){th,td{padding:6px 6px!important;font-size:12px}th{font-size:11px}button{padding:9px 14px;font-size:13px}body{padding-bottom:40px}}
+th{position:sticky;top:0;z-index:2}
+td.l,th:first-child{position:sticky;left:0;z-index:1}
+th:first-child{z-index:3}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center;font-size:13px}
 th{color:var(--sub);font-weight:600;font-size:12px;background:#141822}
-td.l{text-align:left}
+td.l{text-align:left;background:var(--card)}
 tr:hover td{background:#1b2029}
+tr:hover td.l{background:#1b2029}
+@media(max-width:640px){
+ body{padding:10px 10px 30px}
+ h1{font-size:16px;margin-bottom:2px;flex-basis:100%;white-space:nowrap}
+ .hd{gap:6px;margin-bottom:4px}
+ .hd .meta{font-size:11px}
+ button{padding:7px 9px;font-size:12px}
+ .tabs{gap:6px;margin:6px 0}
+ .stat{gap:8px;margin-bottom:4px;font-size:11px}
+ .legend{font-size:11px;line-height:1.9;margin-bottom:6px}
+ #tableWrap{max-height:60vh}
+ th,td{padding:5px 4px!important;font-size:12px}
+ th{font-size:11px}
+}
 .ok{color:var(--ok)}.unreg{color:var(--warn)}.fail{color:var(--err)}.unknown{color:var(--dim)}
 .bar{display:inline-block;width:8px;height:8px;border-radius:4px;margin-right:6px}
 .empty{color:var(--sub);text-align:center;padding:50px 0}
@@ -781,8 +797,8 @@ tr:hover td{background:#1b2029}
 <div class="hd">
 <h1>小程序注册状态矩阵</h1>
 <button id="filterAll" class="on" onclick="setF('all')">全部</button>
-<button id="filterUnreg" onclick="setF('unreg')">只看未注册</button>
-<button id="filterSpec" onclick="setF('spec')">需抓包/手机授权</button>
+<button id="filterUnreg" onclick="setF('unreg')">未注册</button>
+<button id="filterSpec" onclick="setF('spec')">需处理</button>
 <button onclick="location.href=&apos;/&apos;">返回</button>
 <div class="meta" id="meta"></div>
 </div>
@@ -819,7 +835,7 @@ function render(){
  let ok=0,un=0,fl=0;
  scripts.forEach(([k,v])=>Object.values(v.per||{}).forEach(x=>{if(x==='ok')ok++;else if(x==='unreg')un++;else if(x==='fail')fl++;}));
  document.getElementById('stat').innerHTML='<span>✅ 已注册: <b>'+ok+'</b></span><span>❌ 未注册: <b>'+un+'</b></span><span>⚠️ 其他失败: <b>'+fl+'</b></span><span>➖ 无数据: <b>'+(scripts.length?scripts.filter(([k,v])=>!Object.keys(v.per||{}).length).length:0)+'</b></span><span>脚本数: <b>'+scripts.length+'</b></span>';
- document.getElementById('legend').innerHTML='类型: <span class="bdg" title="需手动抓包获取token填变量,悬停各行徽章看具体变量">📡 需抓包 '+Object.keys(NEED_HAR).length+'</span> · <span class="bdg" title="登录依赖手机号授权,协议层不支持,须手机微信内操作一次">📲 需手机授权 '+Object.keys(NEED_PHONE).length+'</span> · <span class="bdg" title="手机微信打开该小程序,完成注册/授权一次后脚本才有产出">📱 需注册 '+Object.keys(NEED_REG).length+'</span> · 无标记=打开即用';
+ document.getElementById('legend').innerHTML='状态:✅已注册 ❌未注册 ⚠️失败 ➖无数据<br>类型: <span class="bdg" title="需手动抓包获取token填变量,悬停各行徽章看具体变量">📡 需抓包 '+Object.keys(NEED_HAR).length+'</span> · <span class="bdg" title="登录依赖手机号授权,协议层不支持,须手机微信内操作一次">📲 需手机授权 '+Object.keys(NEED_PHONE).length+'</span> · <span class="bdg" title="手机微信打开该小程序,完成注册/授权一次后脚本才有产出">📱 需注册 '+Object.keys(NEED_REG).length+'</span> · 无标记=打开即用';
  if(tab==='m'){
    const short = window.matchMedia('(max-width:640px)').matches;
    let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th title="'+disp(a)+'">'+(short && (data.aliases||{})[a] && (data.aliases||{})[a].mobile ? (data.aliases||{})[a].mobile.slice(-4) : disp(a))+'</th>').join('')+'</tr>';

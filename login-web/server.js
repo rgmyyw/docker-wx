@@ -791,7 +791,7 @@ tr:hover td{background:#1b2029}
 let tab='m', filter='all', data=null;
 function setF(f){filter=f;document.getElementById('filterAll').className=f==='all'?'on':'';document.getElementById('filterUnreg').className=f==='unreg'?'on':'';render();}
 function setTab(t){tab=t;document.getElementById('tab-m').className=t==='m'?'on':'';document.getElementById('tab-a').className=t==='a'?'on':'';render();}
-const ICON={ok:'<span class="ok">✓</span>',unreg:'<span class="unreg">✗未注册</span>',fail:'<span class="fail">!失败</span>',unknown:'<span class="unknown">·</span>'};
+const ICON={ok:'<span class="ok" title="已注册">✅</span>',unreg:'<span class="unreg" title="未注册(需手机授权)">❌</span>',fail:'<span class="fail" title="其他失败">⚠️</span>',unknown:'<span class="unknown" title="无数据">➖</span>'};
 function fmtPer(p){return p?ICON[p]||ICON.unknown:ICON.unknown;}
 function render(){
  if(!data)return;
@@ -805,7 +805,7 @@ function render(){
  rows.sort((a,b)=>{const ua=Object.values(a[1].per||{}).filter(x=>x==='unreg').length,ub=Object.values(b[1].per||{}).filter(x=>x==='unreg').length;return ub-ua||a[1].name.localeCompare(b[1].name);});
  let ok=0,un=0,fl=0;
  scripts.forEach(([k,v])=>Object.values(v.per||{}).forEach(x=>{if(x==='ok')ok++;else if(x==='unreg')un++;else if(x==='fail')fl++;}));
- document.getElementById('stat').innerHTML='<span>✓ 已注册: <b>'+ok+'</b></span><span>✗ 未注册: <b>'+un+'</b></span><span>! 其他失败: <b>'+fl+'</b></span><span>脚本数: <b>'+scripts.length+'</b></span>';
+ document.getElementById('stat').innerHTML='<span>✅ 已注册: <b>'+ok+'</b></span><span>❌ 未注册: <b>'+un+'</b></span><span>⚠️ 其他失败: <b>'+fl+'</b></span><span>➖ 无数据: <b>'+(scripts.length?scripts.filter(([k,v])=>!Object.keys(v.per||{}).length).length:0)+'</b></span><span>脚本数: <b>'+scripts.length+'</b></span>';
  if(tab==='m'){
    let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th>'+a+'</th>').join('')+'</tr>';
    for(const [k,v] of rows){

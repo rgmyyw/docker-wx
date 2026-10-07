@@ -412,6 +412,36 @@ async function qrPoll() {
 }
 setInterval(qrPoll, 4000);
 
+/* /wx/getuserinfo:JSLogin 取 code + JSOperateWxData(Opt=2) 取 encryptedData/iv */
+async function wxGetUserInfoCompat(body) {
+  const appid = body && body.appid;
+  if (!appid) return { status: false, message: '缺少 appid' };
+  const key = body.openid ? String(body.openid).split('#')[0].trim() : '';
+  let acc = null;
+  if (key) acc = accounts.find(a => a.alias === key || a.wxid === key) || null;
+  if (!acc) acc = accounts[0];
+  if (!acc) return { status: false, message: '无已登录微信' };
+  try {
+    const login = await api('/api/Wxapp/JSLogin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Wxid: acc.wxid, Appid: appid }),
+    });
+    const code = login.Data && (login.Data.code || login.Data.Code);
+    const oper = await api('/api/Wxapp/JSOperateWxData', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Wxid: acc.wxid, Appid: appid, Opt: 2, Data: '' }),
+    });
+    const b64 = oper.Data && oper.Data.data;
+    if (!oper.Success || !b64) return { status: false, message: `getUserInfo 失败: ${(oper.Data && oper.Data.jsapiBaseresponse && oper.Data.jsapiBaseresponse.errmsg) || oper.Message}` };
+    const inner = JSON.parse(Buffer.from(b64, 'base64').toString('utf-8'));
+    if (!code || !inner.encryptedData || !inner.iv) return { status: false, message: '授权数据不完整' };
+    let userInfo = {};
+    try { userInfo = JSON.parse(inner.data); } catch {}
+    log('info', `[${acc.alias}] getuserinfo 成功 appid=${appid}`);
+    return { status: true, data: { code: String(code), encryptedData: inner.encryptedData, iv: inner.iv, signature: inner.signature, cloud_id: inner.cloud_id, userInfo } };
+  } catch (e) { return { status: false, message: e.message }; }
+}
+
 /* ---------------- smallcat 兼容层(多账号路由) ----------------
    POST /wx/code {appid, openid} → openid 按 alias/wxid 匹配账号(空=第一个) */
 async function wxCodeCompat(body) {
@@ -749,8 +779,7 @@ http.createServer(async (req, res) => {
   } else if (req.method === 'POST' && url.pathname === '/wx/refresh') {
     json(200, { status: true });
   } else if (req.method === 'POST' && url.pathname === '/wx/getuserinfo') {
-    log('warn', '脚本请求 /wx/getuserinfo(旧式授权数据,微信已关闭该能力,无法提供 encryptedData/iv)');
-    json(200, { status: false, message: 'docker-wx 无法提供旧式 getUserInfo 授权数据(微信已关闭),请走 code 登录通道' });
+    json(200, await wxGetUserInfoCompat(await body()));
   } else if (req.method === 'POST' && url.pathname === '/wx/getphonenumber') {
     log('warn', '脚本请求 /wx/getphonenumber(手机号授权码,docker-wx 协议未实现)');
     json(200, { status: false, message: 'docker-wx 未实现手机号授权码获取,该功能不可用' });

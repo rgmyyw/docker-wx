@@ -311,8 +311,71 @@ function pickAcc(aliasOrWxid) {
   return accounts.find(a => a.alias === String(aliasOrWxid) || a.wxid === aliasOrWxid) || null;
 }
 
+/* ---------------- JSLogin 统一闸门 ----------------
+   微信对 js-login 按【微信号】限频,额度跨小程序共享(jingjianx 同号 12s 连登 5 店后,
+   该号换任何小程序取码全 -13000 的实证)。策略:同 wxid 串行 + 令牌桶(短期 3/20s、
+   长期 8/10min)+ 超发排队 12s 后干净失败(不把额度打爆进冷却);-13000 = 整号 15 分钟
+   快速失败(冷却期内换 appid 也拒发,不再白烧额度)。
+   注:code 是一次性消费品(业务后端 jscode2session 即作废),不可跨登录复用;
+   唯一安全复用 = 微信官方 getallphone 返回的配对 code(见 /wx/getphonenumber)。 */
+const jsGate = {};         // wxid -> { tail, times[], coolUntil }
+const JS_MIN_GAP = 1500;       // 同微信号两次 js-login 最小间隔
+const JS_WIN1_MS = 20_000, JS_WIN1_MAX = 3;        // 短期突发上限
+const JS_WIN2_MS = 600_000, JS_WIN2_MAX = 8;       // 长期总量上限
+const JS_QUEUE_WAIT = 12_000;   // 令牌桶满时最长排队(脚本侧 HTTP 超时多为 15s+)
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function gateOf(wxid) {
+  if (!jsGate[wxid]) jsGate[wxid] = { tail: Promise.resolve(), times: [], coolUntil: 0 };
+  return jsGate[wxid];
+}
+
+/* 所有 JSLogin 必经:按 wxid 串行 + 节流;整号冷却中抛 {gate:true,message} */
+function jsLoginViaGate(acc, appid) {
+  const st = gateOf(acc.wxid);
+  const run = (async () => {
+    if (st.coolUntil > Date.now()) {
+      const left = Math.ceil((st.coolUntil - Date.now()) / 60_000);
+      throw { gate: true, message: `微信限频冷却中(约剩${left}分钟),该微信号全部小程序取码暂停` };
+    }
+    const last = st.times[st.times.length - 1];
+    if (last) await sleep(Math.max(0, JS_MIN_GAP - (Date.now() - last)));
+    const deadline = Date.now() + JS_QUEUE_WAIT;
+    for (;;) {
+      const now = Date.now();
+      st.times = st.times.filter(t => now - t < JS_WIN2_MS);
+      const short = st.times.filter(t => now - t < JS_WIN1_MS).length;
+      if ((short < JS_WIN1_MAX && st.times.length < JS_WIN2_MAX) || now > deadline) break;
+      await sleep(400);
+    }
+    st.times.push(Date.now());
+    return await api('/api/Wxapp/JSLogin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Wxid: acc.wxid, Appid: appid }),
+    });
+  })();
+  st.tail = run.catch(() => {});
+  return run;
+}
+
+/* 统一解析 JSLogin 响应:成功 {ok,code,sk,openid};-13000 置整号冷却 */
+function parseJsLogin(acc, appid, res) {
+  const d = res.Data || {};
+  const code = d.code || d.Code || (d.Data && (d.Data.code || d.Data.Code));
+  const sk = d.sessionKey || d.SessionKey || (d.Data && (d.Data.sessionKey || d.Data.SessionKey));
+  const openid = d.openid || d.Openid;
+  if (res.Success && code) return { ok: true, code: String(code), sk: sk ? String(sk) : '', openid: openid ? String(openid) : '' };
+  const errCode = d.jsapiBaseresponse && d.jsapiBaseresponse.errcode;
+  const err = (d.jsapiBaseresponse && (d.jsapiBaseresponse.errcode + ' ' + d.jsapiBaseresponse.errmsg)) || res.Message || '空code';
+  if (String(errCode) === '-13000') {
+    gateOf(acc.wxid).coolUntil = Date.now() + 15 * 60_000;
+    log('warn', `[${acc.alias}] js-login 触发微信限频(-13000),微信号进入 15 分钟冷却(appid=${appid})`);
+    return { ok: false, freq: true, message: '微信限频(-13000),该微信号已进入 15 分钟冷却(冷却期内所有小程序取码暂停)' };
+  }
+  return { ok: false, message: `${res.Message || ''} jsapi=${err}` };
+}
+
 /* ---------------- 短信登录(独立,成功即 addAccount) ---------------- */
-const codeCooldown = {}; // wxid|appid -> 上次取码时间(限频冷却)
 const sms = { phase: 'idle', msg: '', checkUrl: '', againUrl: '', cookie: '', data62: '', username: '', password: '', sliderUrl: '', qrPhase: '', qrUrl: '', qrCheck: '' };
 async function smsApply(username, password) {
   if (!username || !password) return { ok: false, msg: '请输入微信账号与密码' };
@@ -429,11 +492,10 @@ async function wxGetUserInfoCompat(body) {
   if (!acc) acc = accounts[0];
   if (!acc) return { status: false, message: '无已登录微信' };
   try {
-    const login = await api('/api/Wxapp/JSLogin', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Wxid: acc.wxid, Appid: appid }),
-    });
-    const code = login.Data && (login.Data.code || login.Data.Code);
+    const login = await jsLoginViaGate(acc, appid);
+    const p = parseJsLogin(acc, appid, login);
+    if (!p.ok) return { status: false, message: `JSLogin 失败: ${p.message}` };
+    const code = p.code;
     const oper = await api('/api/Wxapp/JSOperateWxData', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Wxid: acc.wxid, Appid: appid, Opt: 2, Data: '' }),
@@ -446,7 +508,53 @@ async function wxGetUserInfoCompat(body) {
     try { userInfo = JSON.parse(inner.data); } catch {}
     log('info', `[${acc.alias}] getuserinfo 成功 appid=${appid}`);
     return { status: true, data: { code: String(code), encryptedData: inner.encryptedData, iv: inner.iv, signature: inner.signature, cloud_id: inner.cloud_id, userInfo } };
-  } catch (e) { return { status: false, message: e.message }; }
+  } catch (e) { return { status: false, message: e && e.message }; }
+}
+
+/* ---------------- /wx/getphonenumber ----------------
+   走 wxapi GetAllMobile(mmbiz customphone/getallphone):微信官方返回本账号绑定
+   手机号的 encryptedData/iv/cloud_id(+配对 code),内容与在小程序里手点一次
+   "允许"完全一致;不经 js-login,不占 -13000 限额。登录用的 wx.login code
+   仍由脚本随后经 /wx/code 自取(标准小程序会话模型,session_key 同源可解)。 */
+async function wxGetPhoneNumberCompat(body) {
+  const appid = body && body.appid;
+  if (!appid) return { status: false, message: '缺少 appid' };
+  const key = body.openid ? String(body.openid).split('#')[0].trim() : '';
+  let acc = null;
+  if (key) acc = accounts.find(a => a.alias === key || a.wxid === key) || null;
+  if (!acc) acc = accounts[0];
+  if (!acc) return { status: false, message: '无已登录微信' };
+  try {
+    const res = await api('/api/Wxapp/GetAllMobile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Wxid: acc.wxid, Appid: appid }),
+    });
+    const d = res.Data || {};
+    const err = d.jsapiBaseresponse && d.jsapiBaseresponse.errcode;
+    if (!res.Success || (err !== undefined && err !== null && String(err) !== '0')) {
+      return { status: false, message: `获取手机号授权数据失败: ${(d.jsapiBaseresponse && d.jsapiBaseresponse.errmsg) || res.Message || ('errcode ' + err)}` };
+    }
+    // 首选内层 Data 字符串(wx_phone / custom_phone_list),兜底 ALLMobile 数组
+    let items = [];
+    try {
+      const inner = typeof d.Data === 'string' ? JSON.parse(d.Data) : d.Data;
+      if (inner && Array.isArray(inner.custom_phone_list)) items = inner.custom_phone_list;
+      else if (inner && inner.wx_phone) items = [inner.wx_phone];
+    } catch {}
+    if (!items.length && Array.isArray(d.ALLMobile)) items = d.ALLMobile;
+    const accMobile = String(acc.mobile || '').replace(/\D/g, '');
+    const item = items.find(x => x && x.encryptedData && (!accMobile || String(x.mobile || '').replace(/\D/g, '') === accMobile))
+      || items.find(x => x && x.encryptedData);
+    if (!item) return { status: false, message: `微信未返回手机号授权数据(${items.length} 条记录均无 encryptedData,可能需先在小程序内授权一次)` };
+    let phoneCode = '';
+    try { const dd = typeof item.data === 'string' ? JSON.parse(item.data) : item.data; phoneCode = (dd && dd.code) || item.code || ''; } catch {}
+    log('info', `[${acc.alias}] getphonenumber 成功(微信官方数据) appid=${appid} 手机号=${item.show_mobile || item.mobile}`);
+    const raw = { mobile: item.mobile || '', show_mobile: item.show_mobile || '', encryptedData: item.encryptedData, iv: item.iv, cloud_id: item.cloud_id || '', code: phoneCode };
+    return {
+      status: true, code: phoneCode, phone: item.mobile || '', encryptedData: item.encryptedData, iv: item.iv, cloud_id: item.cloud_id || '',
+      data: { code: phoneCode, phone: item.mobile || '', phoneNumber: item.mobile || '', encryptedData: item.encryptedData, iv: item.iv, cloud_id: item.cloud_id || '', raw },
+    };
+  } catch (e) { return { status: false, message: e && e.message }; }
 }
 
 /* ---------------- smallcat 兼容层(多账号路由) ----------------
@@ -461,42 +569,24 @@ async function wxCodeCompat(body) {
     if (!acc) return { status: false, message: `标识 ${key} 未登录(现有标识:${accounts.map(a => a.alias).join(',') || '无'})` };
   } else acc = accounts[0];
   if (!acc) return { status: false, message: '无已登录微信,请先在登录台扫码' };
-  // 空 code 多为微信对同账号+同 appid 的短时限频(-13000),间隔重试
-  // 同账号+同 appid 90 秒冷却:拒绝连打,防止限频雪上加霜
-  const coolKey = acc.wxid + '|' + appid;
-  const now = Date.now();
-  const cd = codeCooldown[coolKey] || {};
-  if (cd.until > now) {
-    const left = Math.ceil((cd.until - now) / 60_000);
-    return { status: false, message: `微信限频冷却中(约${left}分钟),稍后自动恢复` };
-  }
   let lastMsg = '';
   for (let i = 0; i < 3; i++) {
-    if (i) await new Promise(r => setTimeout(r, 6000));
+    if (i) await sleep(6000);
     try {
-      const res = await api('/api/Wxapp/JSLogin', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Wxid: acc.wxid, Appid: appid }),
-      });
-      const d = res.Data || {};
-      const code = d.Code || d.code || (d.Data && (d.Data.Code || d.Data.code));
-      if (res.Success && code) {
+      const res = await jsLoginViaGate(acc, appid);
+      const p = parseJsLogin(acc, appid, res);
+      if (p.ok) {
         if (i) log('info', `[${acc.alias}] 小程序取码成功(第${i + 1}次尝试) appid=${appid}`);
         else log('info', `[${acc.alias}] 小程序取码成功 appid=${appid}`);
         // 平铺 code + 嵌套 data.code 双路径:脚本解析两种风格并存(提现免费券.py 只读 data.data.code,camel.js 等读 code || data.code)
-        return { status: true, code: String(code), data: { code: String(code) } };
+        return { status: true, code: p.code, data: { code: p.code } };
       }
-      const errCode = d.jsapiBaseresponse && d.jsapiBaseresponse.errcode;
-      const err = (d.jsapiBaseresponse && (d.jsapiBaseresponse.errcode + ' ' + d.jsapiBaseresponse.errmsg)) || res.Message || '空code';
-      lastMsg = `${res.Message || ''} jsapi=${err}`;
-      if (String(errCode) === '-13000') {
-        // 微信限频:冷却 15 分钟并立即放弃重试(重试只会续杯限频)
-        codeCooldown[coolKey] = { until: Date.now() + 15 * 60_000, freq: true };
-        log('warn', `[${acc.alias}] 取码触发微信限频(-13000),该组合冷却 15 分钟 appid=${appid}`);
-        return { status: false, message: '微信限频(-13000),已进入 15 分钟冷却' };
-      }
+      lastMsg = p.message;
+      if (p.freq) return { status: false, message: p.message };
       log('warn', `[${acc.alias}] 小程序取码空code(尝试${i + 1}/3) appid=${appid}: ${lastMsg}`);
-    } catch (e) { lastMsg = e.message; log('error', `[${acc.alias}] 取码异常(尝试${i + 1}/3): ${e.message}`); }
+    } catch (e) {
+      if (e && e.gate) return { status: false, message: e.message };
+      lastMsg = e.message; log('error', `[${acc.alias}] 取码异常(尝试${i + 1}/3): ${e.message}`); }
   }
   return { status: false, message: `取码失败: ${lastMsg}` };
 }
@@ -811,8 +901,11 @@ tr:hover td.l{background:#1b2029}
 </div>
 <script>
 const NEED_HAR={fuyouhui:'需抓包:填 fuyouhui_token',hisense_aijia:'需抓包:hisense_aijia_token/customerId/loginKey/refreshToken/sign_task_id(5个,可手机授权免抓但协议不支持)',hongsehuojian:'需抓包:填 hshj_ticket(App内已登录token,手机授权协议不支持)',longfor:'需抓包:填 longfor_dx_token',qqpcmgr:'需抓包:qqpcmgr_authCode/guid/lid/sdiaid/computer/ua/version 等8个',roki:'需抓包:填 roki_api_base',yichengtong:'需抓包:填 yichengtong_token'};
-const NEED_PHONE={colorful:'需手机授权:登录依赖手机号授权(/wx/getphonenumber),协议不支持,须手机微信内操作',dfmfs:'需手机授权:登录依赖手机号授权,协议不支持,须手机微信内操作',haitian:'需手机授权:登录依赖手机号授权edata/iv,协议不支持,须手机微信内操作',jdbclub:'需手机授权:加多宝登录走手机号phoneCode,协议不支持,须手机微信内操作',jx:'需手机授权:酒仙网首登需手机号授权绑定,须手机微信内操作(已有缓存token可跳过)',jyxe:'需手机授权:旧衣小二登录必须带手机号授权code,须手机微信内操作(缓存token可复用)',rytyn:'需手机授权:认养一头牛手机号授权登录,协议不支持,须手机微信内操作',wrn:'需手机授权:登录依赖手机号授权,须手机微信内操作',yipiaoda:'需手机授权:壹票达首登需手机号授权建号,须手机微信内操作'};
-const NEED_REG={aiguo:'需注册:手机微信打开小程序完成注册/授权一次',aima:'需注册:爱玛会员俱乐部登录报110502用户不存在,需小程序内注册会员一次',ardywj:'需注册:爱康需完成手机号授权/注册(小程序内)',bydhy:'需注册:手机微信打开小程序完成注册/授权一次',dfrc:'需注册:手机微信打开小程序完成注册/授权一次',dsmmhy:'需注册:袋鼠妈妈有赞平台需注册会员',fmy:'需注册:手机微信打开小程序完成注册/授权一次',hougongfang:'需注册:手机微信打开小程序完成注册/授权一次',hxek:'需注册:手机微信打开小程序完成注册/授权一次',junpinhui:'需注册:手机微信打开小程序完成注册/授权一次',lmf:'需注册:手机微信打开小程序完成注册/授权一次',lthwy:'需注册:手机微信打开小程序完成注册/授权一次',mdhy:'需注册:美的M-VIP需注册会员',mobil:'需注册:美孚臻享俱乐部需注册会员',mtyl:'需注册:手机微信打开小程序完成注册/授权一次',nndj:'需注册:牛牛短剧需注册',nxdc:'需注册:奈雪需注册会员',olecs:'需注册:Ole需注册会员',parkson:'需注册:百盛呼啦圈需注册会员',qmsd:'需注册:全棉时代需注册会员',qqhyjlb:'需注册:洽洽会员俱乐部需注册会员',quanmianshidai:'需注册:手机微信打开小程序完成注册/授权一次',quncrm:'需注册:群脉平台需注册会员',qyqd:'需注册:手机微信打开小程序完成注册/授权一次',rio:'需注册:RIO微醺俱乐部需注册会员',rrk:'需注册:手机微信打开小程序完成注册/授权一次',sf:'需注册:顺丰需注册/绑定会员',shanyi:'需注册:手机微信打开小程序完成注册/授权一次',smgc:'需注册:SM广场需注册会员(多城市)',tjg:'需注册:手机微信打开小程序完成注册/授权一次',trsj:'需注册:甜润世界需注册会员',txq:'需注册:汤星球需注册会员',wanjiale:'需注册:万家乐需注册会员',wuyingyundiannao:'需注册:无影云电脑静默登录可能被安全验证拦,被拦时需手填 wuying_token',wx_xlxyh:'需注册:骁龙骁友会需注册',wzy:'需注册:喂自由需注册',xiaodangjia:'需注册:小铛家需注册',xinxianghui:'需注册:手机微信打开小程序完成注册/授权一次',xmsq:'需注册:小米社区需绑定账号',xzyy:'需注册:小紫有约需注册',yjlxh:'需注册:伊家乐享会(伊利)需注册会员',youzan:'需注册:有赞店铺(临水玉泉/TOI/七点五等)需注册会员',yuexihui:'需注册:中粮悦喜荟需注册会员',yzyj:'需注册:微盟onecrm需注册会员',jdcode:'需注册:非签到,采集京东JD_COOKIE;需在京东小程序内绑定京东账号',juziyingtao:'需注册:橘子樱桃需在小程序内完成手机号授权(业务层)',sinsin:'需注册:sinsin需在小程序内完成手机号授权(业务层)',maopu:'需注册:猫扑不代填资料/不代过手机号授权,需小程序内完成'};
+/* 手机号授权已由 wxlogin /wx/getphonenumber 走 GetAllMobile(微信官方 edata/iv/phoneCode)打通,
+   原 9 个"需手机授权"脚本 2026-10-07 实测全通(haitian/jx/jdbclub/colorful/rytyn/wrn/yipiaoda/jyxe 签到成功,
+   dfmfs 登录通但业务需扫产品红包码,移入 NEED_REG);NEED_PHONE 留空待未来新脚本 */
+const NEED_PHONE={};
+const NEED_REG={aiguo:'需注册:手机微信打开小程序完成注册/授权一次',aima:'需注册:爱玛会员俱乐部登录报110502用户不存在,需小程序内注册会员一次',dfmfs:'需注册:手机号授权登录已通,但业务要求扫产品顶部红包码激活/延长日常活动有效期后才能签到',ardywj:'需注册:爱康需完成手机号授权/注册(小程序内)',bydhy:'需注册:手机微信打开小程序完成注册/授权一次',dfrc:'需注册:手机微信打开小程序完成注册/授权一次',dsmmhy:'需注册:袋鼠妈妈有赞平台需注册会员',fmy:'需注册:手机微信打开小程序完成注册/授权一次',hougongfang:'需注册:手机微信打开小程序完成注册/授权一次',hxek:'需注册:手机微信打开小程序完成注册/授权一次',junpinhui:'需注册:手机微信打开小程序完成注册/授权一次',lmf:'需注册:手机微信打开小程序完成注册/授权一次',lthwy:'需注册:手机微信打开小程序完成注册/授权一次',mdhy:'需注册:美的M-VIP需注册会员',mobil:'需注册:美孚臻享俱乐部需注册会员',mtyl:'需注册:手机微信打开小程序完成注册/授权一次',nndj:'需注册:牛牛短剧需注册',nxdc:'需注册:奈雪需注册会员',olecs:'需注册:Ole需注册会员',parkson:'需注册:百盛呼啦圈需注册会员',qmsd:'需注册:全棉时代需注册会员',qqhyjlb:'需注册:洽洽会员俱乐部需注册会员',quanmianshidai:'需注册:手机微信打开小程序完成注册/授权一次',quncrm:'需注册:群脉平台需注册会员',qyqd:'需注册:手机微信打开小程序完成注册/授权一次',rio:'需注册:RIO微醺俱乐部需注册会员',rrk:'需注册:手机微信打开小程序完成注册/授权一次',sf:'需注册:顺丰需注册/绑定会员',shanyi:'需注册:手机微信打开小程序完成注册/授权一次',smgc:'需注册:SM广场需注册会员(多城市)',tjg:'需注册:手机微信打开小程序完成注册/授权一次',trsj:'需注册:甜润世界需注册会员',txq:'需注册:汤星球需注册会员',wanjiale:'需注册:万家乐需注册会员',wuyingyundiannao:'需注册:无影云电脑静默登录可能被安全验证拦,被拦时需手填 wuying_token',wx_xlxyh:'需注册:骁龙骁友会需注册',wzy:'需注册:喂自由需注册',xiaodangjia:'需注册:小铛家需注册',xinxianghui:'需注册:手机微信打开小程序完成注册/授权一次',xmsq:'需注册:小米社区需绑定账号',xzyy:'需注册:小紫有约需注册',yjlxh:'需注册:伊家乐享会(伊利)需注册会员',youzan:'需注册:有赞店铺(临水玉泉/TOI/七点五等)需注册会员',yuexihui:'需注册:中粮悦喜荟需注册会员',yzyj:'需注册:微盟onecrm需注册会员',jdcode:'需注册:非签到,采集京东JD_COOKIE;需在京东小程序内绑定京东账号',juziyingtao:'需注册:橘子樱桃需在小程序内完成手机号授权(业务层)',sinsin:'需注册:sinsin需在小程序内完成手机号授权(业务层)',maopu:'需注册:猫扑不代填资料/不代过手机号授权,需小程序内完成'};
 function badge(k){const t=NEED_HAR[k]||NEED_PHONE[k]||NEED_REG[k];if(!t)return '';return ' <span class="bdg" title="'+t+'">'+(NEED_HAR[k]?'📡':NEED_PHONE[k]?'📲':'📱')+'</span>';}
 let tab='m', filter='all', data=null;
 function setF(f){filter=f;document.getElementById('filterAll').className=f==='all'?'on':'';document.getElementById('filterUnreg').className=f==='unreg'?'on':'';document.getElementById('filterSpec').className=f==='spec'?'on':'';render();}
@@ -908,8 +1001,7 @@ http.createServer(async (req, res) => {
   } else if (req.method === 'POST' && url.pathname === '/wx/getuserinfo') {
     json(200, await wxGetUserInfoCompat(await body()));
   } else if (req.method === 'POST' && url.pathname === '/wx/getphonenumber') {
-    log('warn', '脚本请求 /wx/getphonenumber(手机号授权码,docker-wx 协议未实现)');
-    json(200, { status: false, message: 'docker-wx 未实现手机号授权码获取,该功能不可用' });
+    json(200, await wxGetPhoneNumberCompat(await body()));
   } else if (req.method === 'POST' && url.pathname === '/newqr') {
     await newQR(true, '手动重新取码'); json(200, { ok: true, msg: '已重新取码' });
   } else if (req.method === 'POST' && url.pathname === '/logout') {

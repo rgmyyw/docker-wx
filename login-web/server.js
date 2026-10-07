@@ -266,6 +266,13 @@ async function checkOffline(acc) {
 }
 setInterval(heartbeatAll, 2 * 60_000);
 
+/* ---------------- 小程序注册状态矩阵 ----------------
+   青龙采集器每天上报(POST /registry/report),聚合存 /data/registry.json
+   状态: ok=已注册/正常, unreg=未注册/需绑定手机号, fail=其他失败 */
+const REG_PATH = '/data/registry.json';
+function loadReg() { try { return JSON.parse(fs.readFileSync(REG_PATH, 'utf8')); } catch { return { updated: '', scripts: {} }; } }
+function saveReg(r) { try { fs.writeFileSync(REG_PATH, JSON.stringify(r, null, 2)); } catch {} }
+
 /* 一键检测:立即对所有账号心跳并返回结果 */
 async function checkNow() {
   if (!accounts.length) return { ok: false, msg: '无账号', lines: [] };
@@ -581,6 +588,7 @@ button.small{padding:5px 10px;font-size:12px}
 <span class="sp"></span>
 <button class="primary" onclick="openModal()">＋ 添加账号</button>
 <button onclick="openCheck()">检测状态</button>
+<button onclick="location.href=&apos;/registrypage&apos;">注册状态</button>
 <button onclick="location.href=&apos;/logspage&apos;">全量日志</button>
 </div>
 <div class="grid" id="accGrid"></div>
@@ -737,6 +745,95 @@ async function tick(){
 tick();
 </script></body></html>`;
 
+/* ---------------- 注册状态矩阵页 ---------------- */
+const REG_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小程序注册状态 · docker-wx</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#232833;--tx:#e6e9ef;--sub:#8b93a3;--ok:#3fb96f;--warn:#e0a23c;--err:#e05c5c;--acc:#4f8ef7;--dim:#5b6472}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC",sans-serif;padding:22px}
+.wrap{max-width:1100px;margin:0 auto}
+.hd{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+h1{font-size:19px;font-weight:600;flex:1}
+.hd .meta{color:var(--sub);font-size:12px;width:100%}
+button{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+button.on{border-color:var(--acc);color:var(--acc)}
+.tabs{display:flex;gap:8px;margin:10px 0}
+.stat{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-bottom:10px;flex-wrap:wrap}
+.stat b{color:var(--tx)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center;font-size:13px}
+th{color:var(--sub);font-weight:600;font-size:12px;background:#141822}
+td.l{text-align:left}
+tr:hover td{background:#1b2029}
+.ok{color:var(--ok)}.unreg{color:var(--warn)}.fail{color:var(--err)}.unknown{color:var(--dim)}
+.bar{display:inline-block;width:8px;height:8px;border-radius:4px;margin-right:6px}
+.empty{color:var(--sub);text-align:center;padding:50px 0}
+.acc-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.acc-card .big{font-size:22px;font-weight:700}
+</style></head><body><div class="wrap">
+<div class="hd">
+<h1>小程序注册状态矩阵</h1>
+<button id="filterAll" class="on" onclick="setF('all')">全部</button>
+<button id="filterUnreg" onclick="setF('unreg')">只看未注册</button>
+<button onclick="location.href=&apos;/&apos;">返回</button>
+<div class="meta" id="meta"></div>
+</div>
+<div class="tabs">
+<button class="on" id="tab-m" onclick="setTab('m')">按小程序</button>
+<button id="tab-a" onclick="setTab('a')">按账号</button>
+</div>
+<div class="stat" id="stat"></div>
+<div id="body"></div>
+</div>
+<script>
+let tab='m', filter='all', data=null;
+function setF(f){filter=f;document.getElementById('filterAll').className=f==='all'?'on':'';document.getElementById('filterUnreg').className=f==='unreg'?'on':'';render();}
+function setTab(t){tab=t;document.getElementById('tab-m').className=t==='m'?'on':'';document.getElementById('tab-a').className=t==='a'?'on':'';render();}
+const ICON={ok:'<span class="ok">✓</span>',unreg:'<span class="unreg">✗未注册</span>',fail:'<span class="fail">!失败</span>',unknown:'<span class="unknown">·</span>'};
+function fmtPer(p){return p?ICON[p]||ICON.unknown:ICON.unknown;}
+function render(){
+ if(!data)return;
+ const scripts=Object.entries(data.scripts||{});
+ const aliases=[...new Set(scripts.flatMap(([,v])=>Object.keys(v.per||{})))].sort();
+ document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 来自每日任务执行日志(20:05 采集)';
+ let rows=scripts.filter(([k,v])=>{
+   if(filter!=='unreg')return true;
+   return Object.values(v.per||{}).some(x=>x==='unreg');
+ });
+ rows.sort((a,b)=>{const ua=Object.values(a[1].per||{}).filter(x=>x==='unreg').length,ub=Object.values(b[1].per||{}).filter(x=>x==='unreg').length;return ub-ua||a[1].name.localeCompare(b[1].name);});
+ let ok=0,un=0,fl=0;
+ scripts.forEach(([k,v])=>Object.values(v.per||{}).forEach(x=>{if(x==='ok')ok++;else if(x==='unreg')un++;else if(x==='fail')fl++;}));
+ document.getElementById('stat').innerHTML='<span>✓ 已注册: <b>'+ok+'</b></span><span>✗ 未注册: <b>'+un+'</b></span><span>! 其他失败: <b>'+fl+'</b></span><span>脚本数: <b>'+scripts.length+'</b></span>';
+ if(tab==='m'){
+   let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th>'+a+'</th>').join('')+'</tr>';
+   for(const [k,v] of rows){
+     h+='<tr><td class="l">'+(v.name||k)+'</td>'+aliases.map(a=>'<td>'+fmtPer((v.per||{})[a])+'</td>').join('')+'</tr>';
+   }
+   document.getElementById('body').innerHTML=h+'</table>'||'<div class="empty">无数据</div>';
+ }else{
+   let h='';
+   for(const a of aliases){
+     const mine=scripts.filter(([k,v])=>(v.per||{}).hasOwnProperty(a));
+     const myOk=mine.filter(([k,v])=>v.per[a]==='ok').length;
+     const myUn=mine.filter(([k,v])=>v.per[a]==='unreg').length;
+     h+='<div class="acc-card"><div><div class="big">账号 '+a+'</div><div style="color:var(--sub);font-size:12px">已注册 '+myOk+' · 未注册 '+myUn+' · 共 '+mine.length+'</div></div>';
+     if(myUn){
+       h+='<div style="flex:1;min-width:280px"><div style="font-size:12px;color:var(--sub)">未注册清单:</div><div style="font-size:12px;color:var(--warn)">'+mine.filter(([k,v])=>v.per[a]==='unreg').map(([k,v])=>v.name||k).slice(0,60).join('、')+'</div></div>';
+     } else h+='<div style="color:var(--ok)">全部已注册 ✓</div>';
+     h+='</div>';
+   }
+   document.getElementById('body').innerHTML=h||'<div class="empty">无数据</div>';
+ }
+}
+async function tick(){
+ try{data=await(await fetch('/registry')).json();render();}catch(e){}
+ setTimeout(tick,30000);
+}
+tick();
+</script></body></html>`;
+
 http.createServer(async (req, res) => {
   const _t0 = Date.now();
   res.on('finish', () => {
@@ -808,6 +905,21 @@ http.createServer(async (req, res) => {
     json(200, await smsVerify(code));
   } else if (req.method === 'POST' && url.pathname === '/sms/qrapply') {
     json(200, await qrApply());
+  } else if (req.method === 'POST' && url.pathname === '/registry/report') {
+    const b = await body();
+    const reg = loadReg();
+    reg.updated = new Date().toISOString();
+    for (const item of (Array.isArray(b) ? b : [])) {
+      if (!item || !item.script) continue;
+      reg.scripts[item.script] = { name: item.name || item.script, per: item.per || {}, ts: new Date().toISOString() };
+    }
+    saveReg(reg);
+    log('info', `注册状态上报:${(Array.isArray(b) ? b : []).length} 个脚本`);
+    json(200, { ok: true });
+  } else if (req.method === 'GET' && url.pathname === '/registry') {
+    json(200, loadReg());
+  } else if (req.method === 'GET' && url.pathname === '/registrypage') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(REG_PAGE);
   } else if (req.method === 'POST' && url.pathname === '/checknow') {
     json(200, await checkNow());
   } else if (req.method === 'POST' && url.pathname === '/test-notify') {

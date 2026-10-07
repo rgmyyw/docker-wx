@@ -748,6 +748,12 @@ http.createServer(async (req, res) => {
     json(200, await wxCodeCompat(await body()));
   } else if (req.method === 'POST' && url.pathname === '/wx/refresh') {
     json(200, { status: true });
+  } else if (req.method === 'POST' && url.pathname === '/wx/getuserinfo') {
+    log('warn', '脚本请求 /wx/getuserinfo(旧式授权数据,微信已关闭该能力,无法提供 encryptedData/iv)');
+    json(200, { status: false, message: 'docker-wx 无法提供旧式 getUserInfo 授权数据(微信已关闭),请走 code 登录通道' });
+  } else if (req.method === 'POST' && url.pathname === '/wx/getphonenumber') {
+    log('warn', '脚本请求 /wx/getphonenumber(手机号授权码,docker-wx 协议未实现)');
+    json(200, { status: false, message: 'docker-wx 未实现手机号授权码获取,该功能不可用' });
   } else if (req.method === 'POST' && url.pathname === '/newqr') {
     await newQR(true, '手动重新取码'); json(200, { ok: true, msg: '已重新取码' });
   } else if (req.method === 'POST' && url.pathname === '/logout') {

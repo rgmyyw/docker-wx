@@ -961,63 +961,76 @@ const REG_PAGE = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>小程序注册状态 · docker-wx</title>
 <style>
-:root{--bg:#0f1115;--card:#171a21;--line:#232833;--tx:#e6e9ef;--sub:#8b93a3;--ok:#3fb96f;--warn:#e0a23c;--err:#e05c5c;--acc:#4f8ef7;--dim:#5b6472}
+:root{--bg:#0b0e14;--card:#12161f;--card2:#141927;--line:#232b3a;--line2:rgba(255,255,255,.05);--tx:#e7ecf5;--sub:#8b98ad;--dim:#5d6878;--ok:#3ddc97;--warn:#f0b34e;--err:#f06565;--acc:#5b9dff}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC",sans-serif;padding:22px}
+body{background:radial-gradient(900px 320px at 50% -80px,rgba(91,157,255,.08),transparent),var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC",sans-serif;padding:22px}
 .wrap{max-width:1100px;margin:0 auto}
-.hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
-h1{font-size:19px;font-weight:600;flex:1}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+h1{font-size:18px;font-weight:650;flex:1;letter-spacing:.3px}
 .hd .meta{color:var(--sub);font-size:12px;width:100%}
-button{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
-button.on{border-color:var(--acc);color:var(--acc)}
-button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
-button.primary:hover{opacity:.88;color:#fff}
-.rowchk{padding:2px 7px;font-size:11px;margin-left:7px;vertical-align:middle;border-radius:6px}
+button{background:#161c28;color:var(--tx);border:1px solid var(--line);border-radius:9px;padding:6px 13px;font-size:12px;cursor:pointer;transition:.15s}
+button:hover{border-color:#35415a}
+button.on{border-color:var(--acc);color:var(--acc);background:rgba(91,157,255,.1)}
+button.primary{background:linear-gradient(135deg,#4d8dff,#3f6ee0);border-color:transparent;color:#fff;box-shadow:0 2px 12px rgba(77,141,255,.35)}
+button.primary:hover{opacity:.9;color:#fff}
+.rowchk{padding:2px 8px;font-size:11px;margin-left:7px;vertical-align:middle;border-radius:7px;background:rgba(91,157,255,.08);border-color:rgba(91,157,255,.25);color:#8fb8ff}
+.rowchk:hover{background:rgba(91,157,255,.18);border-color:var(--acc)}
 .rowchk.busy{opacity:.55}
-#cmodal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
-.mbox{background:var(--card);border:1px solid var(--line);border-radius:14px;width:100%;max-width:680px;max-height:92vh;overflow-y:auto;padding:16px}
+#cmodal{position:fixed;inset:0;background:rgba(4,8,16,.66);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.mbox{background:#141926;border:1px solid #2a3244;border-radius:16px;width:100%;max-width:680px;max-height:92vh;overflow-y:auto;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .mhd{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .mhd b{flex:1;font-size:15px}
 button.small{padding:4px 10px;font-size:11px}
-.cmprog{height:6px;background:#1f2530;border-radius:3px;overflow:hidden;margin-bottom:10px;display:none}
-.cmprog div{height:100%;width:0;background:var(--acc);border-radius:3px;transition:width .4s}
-.cmbar{display:none;background:rgba(63,185,111,.12);border:1px solid rgba(63,185,111,.4);color:var(--ok);border-radius:10px;padding:10px;text-align:center;font-weight:600;font-size:13px;margin-bottom:10px}
-#cmLog{background:#12141a;border-radius:10px;padding:10px;font:11.5px/1.7 ui-monospace,Menlo,Consolas,monospace;color:var(--sub);white-space:pre-wrap;word-break:break-all;max-height:60vh;overflow-y:auto;margin:0}
-#toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#1f2530;border:1px solid var(--line);padding:10px 18px;border-radius:9px;font-size:13px;display:none;z-index:99}
-.tabs{display:flex;gap:8px;margin:10px 0}
-.stat{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-bottom:10px;flex-wrap:wrap}
-.stat b{color:var(--tx)}
-#tableWrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px}
+.cmprog{height:7px;background:#0f1320;border-radius:4px;overflow:hidden;margin-bottom:10px;display:none}
+.cmprog div{height:100%;width:0;background:linear-gradient(90deg,#4d8dff,#7db1ff);border-radius:4px;transition:width .4s}
+.cmbar{display:none;background:rgba(61,220,151,.1);border:1px solid rgba(61,220,151,.35);color:var(--ok);border-radius:10px;padding:10px;text-align:center;font-weight:600;font-size:13px;margin-bottom:10px}
+#cmLog{background:#0d1119;border:1px solid #1d2433;border-radius:10px;padding:10px;font:11.5px/1.7 ui-monospace,Menlo,Consolas,monospace;color:#a8b6cc;white-space:pre-wrap;word-break:break-all;max-height:60vh;overflow-y:auto;margin:0}
+#toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#1a2233;border:1px solid #2f3a52;padding:10px 18px;border-radius:10px;font-size:13px;display:none;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.tabs{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:3px;gap:2px;margin:12px 0 10px}
+.tabs button{border:none;background:transparent;border-radius:8px;padding:5px 14px;color:var(--sub)}
+.tabs button.on{background:#243052;color:#d7e5ff}
+.stat{display:flex;gap:8px;font-size:12px;color:var(--sub);margin:0 0 10px;flex-wrap:wrap}
+.stat span{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:5px 11px;display:inline-flex;align-items:center;gap:7px}
+.stat b{color:var(--tx);font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+#tableWrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 34px rgba(0,0,0,.35)}
 table{width:100%;border-collapse:collapse;background:var(--card)}
 th{position:sticky;top:0;z-index:2}
 td.l,th:first-child{position:sticky;left:0;z-index:1}
 th:first-child{z-index:3}
-th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center;font-size:13px}
-th{color:var(--sub);font-weight:600;font-size:12px;background:#141822}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line2);text-align:center;font-size:13px}
+th{color:#7e8ba0;font-weight:600;font-size:11px;letter-spacing:.6px;background:#10141e;border-bottom:1px solid var(--line)}
 td.l{text-align:left;background:var(--card)}
-tr:hover td{background:#1b2029}
-tr:hover td.l{background:#1b2029}
+tr:nth-child(even) td{background:var(--card2)}
+tr:nth-child(even) td.l{background:var(--card2)}
+tr:hover td{background:#1d2740}
+tr:hover td.l{background:#1d2740}
+.c{display:inline-flex;min-width:26px;height:21px;border-radius:6px;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace}
+.c.ok{background:rgba(61,220,151,.13);color:var(--ok)}
+.c.unreg{background:rgba(240,179,78,.12);color:var(--warn)}
+.c.fail{background:rgba(240,101,101,.13);color:var(--err)}
+.c.unknown{background:rgba(139,152,173,.1);color:var(--dim)}
+.empty{color:var(--sub);text-align:center;padding:50px 0}
+.bdg{cursor:help;font-size:11px;white-space:nowrap;opacity:.85}
+.legend{font-size:12px;color:var(--sub);margin:0 0 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.legend .c{transform:scale(.86)}
+.acc-card{background:linear-gradient(180deg,#151b28,#12161f);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;box-shadow:0 4px 18px rgba(0,0,0,.25)}
+.acc-card .big{font-size:22px;font-weight:700;color:#dbe6f8}
 @media(max-width:640px){
  body{padding:10px 10px 30px}
  h1{font-size:16px;margin-bottom:2px;flex-basis:100%;white-space:nowrap}
  .hd{gap:6px;margin-bottom:4px}
  .hd .meta{font-size:11px}
  button{padding:7px 9px;font-size:12px}
- .rowchk{padding:4px 8px;margin-left:5px}
- .tabs{gap:6px;margin:6px 0}
- .stat{gap:8px;margin-bottom:4px;font-size:11px}
- .legend{font-size:11px;line-height:1.9;margin-bottom:6px}
+ .rowchk{padding:4px 8px;margin-left:4px}
+ .tabs{margin:8px 0}
+ .stat{gap:6px;margin-bottom:8px;font-size:11px}
+ .stat span{padding:4px 9px;border-radius:9px}
+ .legend{font-size:11px;gap:10px;margin-bottom:10px}
  th,td{padding:5px 4px!important;font-size:12px}
- th{font-size:11px}
+ th{font-size:10px}
+ .c{min-width:22px;height:19px;font-size:11px;border-radius:5px}
 }
-.ok{color:var(--ok)}.unreg{color:var(--warn)}.fail{color:var(--err)}.unknown{color:var(--dim)}
-.bar{display:inline-block;width:8px;height:8px;border-radius:4px;margin-right:6px}
-.empty{color:var(--sub);text-align:center;padding:50px 0}
-.bdg{cursor:help;font-size:11px;white-space:nowrap}
-.legend{font-size:12px;color:var(--sub);margin-bottom:10px}
-.legend .bdg{font-size:13px}
-.acc-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-.acc-card .big{font-size:22px;font-weight:700}
 </style></head><body><div class="wrap">
 <div class="hd">
 <h1>小程序注册状态矩阵</h1>
@@ -1054,7 +1067,7 @@ function badge(k){const t=NEED_HAR[k]||NEED_PHONE[k]||NEED_REG[k];if(!t)return '
 let tab='m', filter='all', data=null;
 function setF(f){filter=f;document.getElementById('filterAll').className=f==='all'?'on':'';document.getElementById('filterUnreg').className=f==='unreg'?'on':'';document.getElementById('filterSpec').className=f==='spec'?'on':'';render();}
 function setTab(t){tab=t;document.getElementById('tab-m').className=t==='m'?'on':'';document.getElementById('tab-a').className=t==='a'?'on':'';render();}
-const ICON={ok:'<span class="ok" title="已注册">✅</span>',unreg:'<span class="unreg" title="未注册(需手机授权)">❌</span>',fail:'<span class="fail" title="其他失败">⚠️</span>',unknown:'<span class="unknown" title="无数据">➖</span>'};
+const ICON={ok:'<span class="c ok" title="已注册">✓</span>',unreg:'<span class="c unreg" title="未注册(需手机授权)">✕</span>',fail:'<span class="c fail" title="其他失败">!</span>',unknown:'<span class="c unknown" title="无数据">–</span>'};
 function fmtPer(p){return p?ICON[p]||ICON.unknown:ICON.unknown;}
 function render(){
  if(!data)return;
@@ -1071,8 +1084,8 @@ function render(){
  let ok=0,un=0,fl=0;
  scripts.forEach(([k,v])=>Object.values(v.per||{}).forEach(x=>{if(x==='ok')ok++;else if(x==='unreg')un++;else if(x==='fail')fl++;}));
  const q=(typeof checkState!=='undefined'&&checkState)?checkState.queue:[];
- document.getElementById('stat').innerHTML='<span>✅ 已注册: <b>'+ok+'</b></span><span>❌ 未注册: <b>'+un+'</b></span><span>⚠️ 其他失败: <b>'+fl+'</b></span><span>➖ 无数据: <b>'+(scripts.length?scripts.filter(([k,v])=>!Object.keys(v.per||{}).length).length:0)+'</b></span><span>脚本数: <b>'+scripts.length+'</b></span>'+(q.length?'<span style="color:var(--acc)">⏳ 检测队列: <b>'+q.length+'</b>(当前 '+q[0].name+')</span>':'');
- document.getElementById('legend').innerHTML='状态:✅已注册 ❌未注册 ⚠️失败 ➖无数据<br>类型: <span class="bdg" title="需手动抓包获取token填变量,悬停各行徽章看具体变量">📡 需抓包 '+Object.keys(NEED_HAR).length+'</span> · <span class="bdg" title="登录依赖手机号授权,协议层不支持,须手机微信内操作一次">📲 需手机授权 '+Object.keys(NEED_PHONE).length+'</span> · <span class="bdg" title="手机微信打开该小程序,完成注册/授权一次后脚本才有产出">📱 需注册 '+Object.keys(NEED_REG).length+'</span> · 无标记=打开即用';
+ document.getElementById('stat').innerHTML='<span><i class="dot" style="background:var(--ok)"></i>已注册 <b>'+ok+'</b></span><span><i class="dot" style="background:var(--warn)"></i>未注册 <b>'+un+'</b></span><span><i class="dot" style="background:var(--err)"></i>其他失败 <b>'+fl+'</b></span><span><i class="dot" style="background:var(--dim)"></i>无数据 <b>'+(scripts.length?scripts.filter(([k,v])=>!Object.keys(v.per||{}).length).length:0)+'</b></span><span><i class="dot" style="background:var(--acc)"></i>脚本 <b>'+scripts.length+'</b></span>'+(q.length?'<span style="border-color:rgba(91,157,255,.45);color:#9cc0ff"><i class="dot" style="background:var(--acc)"></i>检测队列 <b>'+q.length+'</b> · 当前 '+q[0].name+'</span>':'');
+ document.getElementById('legend').innerHTML='<span>'+ICON.ok+' 已注册</span><span>'+ICON.unreg+' 未注册</span><span>'+ICON.fail+' 其他失败</span><span>'+ICON.unknown+' 无数据</span><span style="opacity:.7">|</span><span>类型: <span class="bdg" title="需手动抓包获取token填变量,悬停各行徽章看具体变量">📡 需抓包 '+Object.keys(NEED_HAR).length+'</span> · <span class="bdg" title="登录依赖手机号授权,协议层不支持,须手机微信内操作一次">📲 需手机授权 '+Object.keys(NEED_PHONE).length+'</span> · <span class="bdg" title="手机微信打开该小程序,完成注册/授权一次后脚本才有产出">📱 需注册 '+Object.keys(NEED_REG).length+'</span> · 无标记=打开即用</span>';
  if(tab==='m'){
    const short = window.matchMedia('(max-width:640px)').matches;
    let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th title="'+disp(a)+'">'+(short && (data.aliases||{})[a] && (data.aliases||{})[a].mobile ? (data.aliases||{})[a].mobile.slice(-4) : disp(a))+'</th>').join('')+'</tr>';

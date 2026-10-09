@@ -1095,7 +1095,7 @@ tr:hover td.l{background:#1c2331}
 <div id="body"></div>
 </div>
 <script>
-const NEED_HAR={fuyouhui:'需抓包:填 fuyouhui_token',hisense_aijia:'需抓包:hisense_aijia_token/customerId/loginKey/refreshToken/sign_task_id(5个,可手机授权免抓但协议不支持)',hongsehuojian:'需抓包:填 hshj_ticket(App内已登录token,手机授权协议不支持)',longfor:'需抓包:填 longfor_dx_token',qqpcmgr:'需抓包:qqpcmgr_authCode/guid/lid/sdiaid/computer/ua/version 等8个',roki:'需抓包:填 roki_api_base',yichengtong:'需抓包:填 yichengtong_token'};
+const NEED_HAR={fuyouhui:'需抓包:填 fuyouhui_token',hisense_aijia:'需抓包:hisense_aijia_token/customerId/loginKey/refreshToken/sign_task_id(5个,可手机授权免抓但协议不支持)',hongsehuojian:'需抓包:填 hshj_ticket(App内已登录token,手机授权协议不支持)',longfor:'需抓包:填 longfor_dx_token',roki:'需抓包:填 roki_api_base',yichengtong:'需抓包:填 yichengtong_token'};
 /* 手机号授权已由 wxlogin /wx/getphonenumber 走 GetAllMobile(微信官方 edata/iv/phoneCode)打通,
    原 9 个"需手机授权"脚本 2026-10-07 实测全通(haitian/jx/jdbclub/colorful/rytyn/wrn/yipiaoda/jyxe 签到成功,
    dfmfs 登录通但业务需扫产品红包码,移入 NEED_REG);NEED_PHONE 留空待未来新脚本 */

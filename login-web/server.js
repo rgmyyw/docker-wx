@@ -297,8 +297,23 @@ let checkq = { items: [], running: false, lastDone: null, taskId: 0 };
 function loadCheckq() { try { checkq = { ...checkq, ...JSON.parse(fs.readFileSync(CHECKQ_PATH, 'utf8')) }; } catch {} }
 function saveCheckq() { try { fs.writeFileSync(CHECKQ_PATH, JSON.stringify(checkq)); } catch (e) { log('error', `写 check-queue 失败: ${e.message}`); } }
 
-/* 一键检测(读日志)进度:采集器 registry-scan.py 逐批上报,内存态即可(重启丢显示不丢任务) */
-let scanState = { phase: 'idle', done: 0, total: 0, startedAt: '', updatedAt: 0 };
+/* 一键检测(读日志)进度:采集器逐批上报(含逐项结果行),内存态即可;
+   行内单脚本实时日志:checker 流式上报 check-log,矩阵页弹窗实时展示(像青龙面板) */
+let scanState = { phase: 'idle', done: 0, total: 0, current: '', lines: [], stats: null, startedAt: '', updatedAt: 0 };
+const checkLogs = new Map();   // script -> {name, lines[], done, per, msg, updatedAt}
+function checkLogEntry(script, name) {
+  let e = checkLogs.get(script);
+  if (!e) {
+    e = { name: name || script, lines: [], done: false, per: null, msg: '', updatedAt: Date.now() };
+    checkLogs.set(script, e);
+    if (checkLogs.size > 5) {   // LRU 留最近 5 个脚本的日志
+      let oldest = null, ot = Infinity;
+      for (const [k, v] of checkLogs) if (v.updatedAt < ot) { ot = v.updatedAt; oldest = k; }
+      if (oldest) checkLogs.delete(oldest);
+    }
+  }
+  return e;
+}
 
 async function ql(path, opt = {}, retry = true) {
   if (!QL.id || !QL.secret) throw new Error('未配置青龙 API 凭据(QL_CLIENT_ID/QL_CLIENT_SECRET)');
@@ -354,6 +369,7 @@ async function checkOne(script) {
     } catch (e) { log('error', `checker 重拉失败: ${e.message}`); }
   }
   checkq.items = checkq.items.filter(x => x.script !== script);   // 重复点击=去重重排到队尾
+  checkLogs.delete(script);   // 清上次检测日志,弹窗只看本次
   checkq.items.push({ script, name: hit.name || script, requestedAt: new Date().toISOString() });
   let rerun = false;
   if (!checkq.running) {
@@ -958,10 +974,16 @@ button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
 button.primary:hover{opacity:.88;color:#fff}
 .rowchk{padding:2px 7px;font-size:11px;margin-left:7px;vertical-align:middle;border-radius:6px}
 .rowchk.busy{opacity:.55}
-.scanbar{border:1px solid var(--acc);background:rgba(79,142,247,.08);border-radius:10px;padding:9px 12px;margin-bottom:10px}
-.scanrow{font-size:13px}
-.scanprog{height:6px;background:#1f2530;border-radius:3px;overflow:hidden;margin-top:7px}
-.scanfill{height:100%;width:0;background:var(--acc);border-radius:3px;transition:width .4s}
+#cmodal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.mbox{background:var(--card);border:1px solid var(--line);border-radius:14px;width:100%;max-width:680px;max-height:92vh;overflow-y:auto;padding:16px}
+.mhd{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.mhd b{flex:1;font-size:15px}
+button.small{padding:4px 10px;font-size:11px}
+.cmprog{height:6px;background:#1f2530;border-radius:3px;overflow:hidden;margin-bottom:10px;display:none}
+.cmprog div{height:100%;width:0;background:var(--acc);border-radius:3px;transition:width .4s}
+.cmbar{display:none;background:rgba(63,185,111,.12);border:1px solid rgba(63,185,111,.4);color:var(--ok);border-radius:10px;padding:10px;text-align:center;font-weight:600;font-size:13px;margin-bottom:10px}
+#cmLog{background:#12141a;border-radius:10px;padding:10px;font:11.5px/1.7 ui-monospace,Menlo,Consolas,monospace;color:var(--sub);white-space:pre-wrap;word-break:break-all;max-height:60vh;overflow-y:auto;margin:0}
+#toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#1f2530;border:1px solid var(--line);padding:10px 18px;border-radius:9px;font-size:13px;display:none;z-index:99}
 .tabs{display:flex;gap:8px;margin:10px 0}
 .stat{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-bottom:10px;flex-wrap:wrap}
 .stat b{color:var(--tx)}
@@ -1006,10 +1028,13 @@ tr:hover td.l{background:#1b2029}
 <button onclick="location.href=&apos;/&apos;">返回</button>
 <div class="meta" id="meta"></div>
 </div>
-<div class="scanbar" id="scanbar" style="display:none">
-<div class="scanrow" id="scanTitle">🔍 读取日志中…</div>
-<div class="scanprog"><div class="scanfill" id="scanFill"></div></div>
-</div>
+<div id="cmodal"><div class="mbox">
+<div class="mhd"><b id="cmTitle">检测</b><button class="small" onclick="closeCm()">关闭</button></div>
+<div class="cmprog" id="cmProgWrap"><div id="cmProg"></div></div>
+<div class="cmbar" id="cmBar"></div>
+<pre id="cmLog">等待输出…</pre>
+</div></div>
+<div id="toast"></div>
 <div class="tabs">
 <button class="on" id="tab-m" onclick="setTab('m')">按小程序</button>
 <button id="tab-a" onclick="setTab('a')">按账号</button>
@@ -1036,7 +1061,7 @@ function render(){
  const scripts=Object.entries(data.scripts||{});
  const aliases=[...new Set(scripts.flatMap(([,v])=>Object.keys(v.per||{})))].sort();
  const disp=a=>{const m=(data.aliases||{})[a];if(!m)return a;return m.mobile?m.mobile.slice(0,3)+'****'+m.mobile.slice(-4):(m.wx||m.nick||a);};
- document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 「🔍 一键检测」=重读执行日志;行内 🔍=立即实测该脚本';
+ document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 「🔍 一键检测」=重读执行日志;行内 🔍=立即实测该脚本(弹窗看实时日志)';
  let rows=scripts.filter(([k,v])=>{
    if(filter==='unreg')return Object.values(v.per||{}).some(x=>x==='unreg');
    if(filter==='spec')return !!(NEED_HAR[k]||NEED_PHONE[k]);
@@ -1077,44 +1102,81 @@ async function tick(){
  try{data=await(await fetch('/registry')).json();render();}catch(e){}
  setTimeout(tick,30000);
 }
-/* ---- 一键检测(读日志)+ 行内单脚本实测 ---- */
-let scanBusy=false,checkState=null,lastDoneSeen='';
+/* ---- 检测弹窗:一键(读日志)+ 行内单脚本(实时日志,像青龙面板) ---- */
+let scanBusy=false,checkState=null,lastDoneSeen='',cmWatch='',cmTimer=null;
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>{t.style.display='none'},2800);}
+function openCm(title){
+ document.getElementById('cmTitle').textContent=title;
+ document.getElementById('cmBar').style.display='none';
+ document.getElementById('cmProgWrap').style.display='none';
+ document.getElementById('cmLog').textContent='等待输出…';
+ document.getElementById('cmodal').style.display='flex';
+}
+function closeCm(){cmWatch='';if(cmTimer){clearTimeout(cmTimer);cmTimer=null;}document.getElementById('cmodal').style.display='none';}
+function cmBar(t){const b=document.getElementById('cmBar');b.style.display='block';b.textContent=t;}
+function cmSetLog(t){const el=document.getElementById('cmLog');el.textContent=t;el.scrollTop=el.scrollHeight;}
+function cmStats(p){p=p||{};return '✅'+(p.ok||0)+' ❌'+(p.unreg||0)+' ⚠️'+(p.fail||0)+' ➖'+(p.unknown||0);}
 async function fullScan(){
  if(scanBusy)return;scanBusy=true;
- if(!confirm('重新读取全部执行日志并刷新矩阵?\\n仅重扫任务日志快速判定,不执行脚本,约 10~30 秒。')){scanBusy=false;return;}
+ if(!confirm('重新读取全部执行日志并刷新矩阵?\\n不执行脚本,弹窗内可看扫描进度与逐项判定结果。')){scanBusy=false;return;}
+ scanBusy=false;
  try{
   const r=await(await fetch('/registry/scan/start',{method:'POST'})).json();
-  toast(r.msg||'已触发');
+  if(!r.ok){toast(r.msg||'触发失败');return;}
+  watchFull();
  }catch(e){toast('请求失败');}
- scanBusy=false;
 }
-let scanWasOn=false;
-async function scanTick(){
- let on=false;
- try{
-  const s=await(await fetch('/registry/scan/status')).json();
-  on=s.phase==='scanning';
-  const bar=document.getElementById('scanbar');
-  if(on){
-   bar.style.display='block';
-   document.getElementById('scanFill').style.width=(s.total?Math.max(3,Math.round(s.done*100/s.total)):5)+'%';
-   document.getElementById('scanTitle').textContent='🔍 读取日志中 '+s.done+'/'+s.total;
-  }else{
-   if(scanWasOn){bar.style.display='none';toast('日志读取完成,矩阵已刷新');tick();}
-   bar.style.display='none';
-  }
- }catch(e){}
- scanWasOn=on;
- setTimeout(scanTick,on?1500:5000);
+async function watchFull(){
+ cmWatch='full';openCm('🔍 一键检测(重读执行日志)');
+ const loop=async()=>{
+  if(cmWatch!=='full')return;
+  try{
+   const s=await(await fetch('/registry/scan/status')).json();
+   cmSetLog((s.lines&&s.lines.length)?s.lines.join('\\n'):'等待采集器启动…');
+   if(s.phase==='scanning'){
+    document.getElementById('cmProgWrap').style.display='block';
+    document.getElementById('cmProg').style.width=(s.total?Math.max(3,Math.round(s.done*100/s.total)):5)+'%';
+    cmTimer=setTimeout(loop,1200);
+   }else if(s.phase==='done'){
+    document.getElementById('cmProgWrap').style.display='none';
+    cmBar('✅ 扫描完成:'+cmStats(s.stats)+(s.stats&&s.stats.blank?' · 无日志 '+(s.stats.blank||0):'')+' · 矩阵已刷新');
+    tick();
+   }else if(s.phase==='dead'){
+    cmBar('⚠️ 扫描失联(超 90 秒无进度),请重试');
+   }else{cmTimer=setTimeout(loop,2000);}
+  }catch(e){cmTimer=setTimeout(loop,2500);}
+ };
+ loop();
 }
 async function checkOne(k){
  const hit=(data&&data.scripts)?data.scripts[k]:null;
  const name=(hit&&hit.name)||k;
- if(!confirm('立即执行「'+name+'」脚本并判定注册状态?\\n真实运行该脚本(约 1~7 分钟),结果自动刷新到本行。'))return;
+ if(!confirm('立即执行「'+name+'」并判定注册状态?\\n真实运行该脚本(约 1~7 分钟),弹窗内实时看日志。'))return;
  try{
   const r=await(await fetch('/registry/check-one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:k})})).json();
-  toast(r.msg||'已排队');if(r.ok)render();
+  if(!r.ok){toast(r.msg||'排队失败');return;}
+  toast(r.msg||'已排队');render();
+  watchOne(k,name);
  }catch(e){toast('请求失败');}
+}
+async function watchOne(k,name){
+ cmWatch='one:'+k;openCm('检测 '+name);
+ const loop=async()=>{
+  if(cmWatch!=='one:'+k)return;
+  try{
+   const s=await(await fetch('/registry/check/log?script='+encodeURIComponent(k))).json();
+   if(s.empty){cmTimer=setTimeout(loop,2000);return;}
+   document.getElementById('cmTitle').textContent='检测 '+s.name;
+   cmSetLog((s.lines&&s.lines.length)?s.lines.join('\\n'):'等待检测器启动(排队中或执行中)…');
+   if(s.done){
+    const p=s.per||{},c={ok:0,unreg:0,fail:0,unknown:0};
+    Object.values(p).forEach(x=>{c[x]=(c[x]||0)+1;});
+    cmBar('✅ 判定完成:✅'+(c.ok||0)+' ❌'+(c.unreg||0)+' ⚠️'+(c.fail||0)+' ➖'+(c.unknown||0)+(s.msg?' · '+s.msg:''));
+    tick();
+   }else cmTimer=setTimeout(loop,2000);
+  }catch(e){cmTimer=setTimeout(loop,2500);}
+ };
+ loop();
 }
 async function checkTick(){
  try{
@@ -1137,7 +1199,7 @@ document.getElementById('body').addEventListener('click',function(e){
  if(!b)return;
  checkOne(b.getAttribute('data-script'));
 });
-tick();checkTick();scanTick();
+tick();checkTick();
 </script></body></html>`;
 
 http.createServer(async (req, res) => {
@@ -1243,16 +1305,35 @@ http.createServer(async (req, res) => {
     } catch (e) { log('error', `一键检测失败: ${e.message}`); json(200, { ok: false, msg: e.message }); }
   } else if (req.method === 'GET' && url.pathname === '/registry/check/status') {
     json(200, { queue: checkq.items, running: checkq.running, lastDone: checkq.lastDone });
+  } else if (req.method === 'POST' && url.pathname === '/registry/check-log') {
+    const b = await body();
+    if (!b.script) { json(200, { ok: false }); return; }
+    const e = checkLogEntry(String(b.script), b.name);
+    if (Array.isArray(b.lines) && b.lines.length) {
+      e.lines.push(...b.lines.map(x => String(x).slice(0, 300)));
+      if (e.lines.length > 400) e.lines = e.lines.slice(-400);
+    }
+    e.updatedAt = Date.now();
+    json(200, { ok: true });
+  } else if (req.method === 'GET' && url.pathname === '/registry/check/log') {
+    const s = url.searchParams.get('script') || '';
+    const e = checkLogs.get(s);
+    json(200, e ? { script: s, name: e.name, lines: e.lines, done: e.done, per: e.per, msg: e.msg } : { empty: true });
   } else if (req.method === 'POST' && url.pathname === '/registry/scan/progress') {
     const b = await body();
-    if (b.type === 'start') scanState = { phase: 'scanning', done: 0, total: b.total || 0, startedAt: new Date().toISOString(), updatedAt: Date.now() };
-    else if (b.type === 'step') { scanState.done = b.done || scanState.done; scanState.updatedAt = Date.now(); }
-    else if (b.type === 'done') { scanState.phase = 'idle'; scanState.done = scanState.total; scanState.updatedAt = Date.now(); }
+    if (b.type === 'start') scanState = { phase: 'scanning', done: 0, total: b.total || 0, current: '', lines: [], stats: null, startedAt: new Date().toISOString(), updatedAt: Date.now() };
+    else if (b.type === 'step') {
+      scanState.done = b.done || scanState.done;
+      if (b.current) scanState.current = b.current;
+      if (b.line) { scanState.lines.push(String(b.line).slice(0, 200)); if (scanState.lines.length > 300) scanState.lines.shift(); }
+      scanState.updatedAt = Date.now();
+    } else if (b.type === 'done') { scanState.phase = 'done'; scanState.done = scanState.total; scanState.stats = b.stats || null; scanState.updatedAt = Date.now(); }
     json(200, { ok: true });
   } else if (req.method === 'GET' && url.pathname === '/registry/scan/status') {
-    /* 90s 无更新视为失联(采集器被杀),自动回 idle */
-    const live = scanState.phase === 'scanning' && Date.now() - scanState.updatedAt < 90_000;
-    json(200, { ...scanState, phase: live ? 'scanning' : 'idle' });
+    /* 90s 无更新视为失联(采集器被杀)→ dead;done 保持到下次 start */
+    let phase = scanState.phase;
+    if (phase === 'scanning' && Date.now() - scanState.updatedAt > 90_000) phase = 'dead';
+    json(200, { phase, done: scanState.done, total: scanState.total, current: scanState.current, lines: scanState.lines, stats: scanState.stats });
   } else if (req.method === 'POST' && url.pathname === '/registry/check-one') {
     const b = await body();
     if (!b.script) { json(200, { ok: false, msg: '缺少 script' }); return; }
@@ -1268,6 +1349,9 @@ http.createServer(async (req, res) => {
       ? checkq.items.slice(1)
       : checkq.items.filter(x => x.script !== b.script);
     checkq.lastDone = { script: b.script, name: b.name || b.script, per: b.per || {}, msg: (b.msg || '').slice(0, 120), t: new Date().toISOString() };
+    /* 同步落弹窗日志的完成态(完成语义统一由 check-done 承载) */
+    const ce = checkLogs.get(b.script);
+    if (ce) { ce.done = true; ce.per = b.per || {}; ce.msg = (b.msg || '').slice(0, 120); ce.updatedAt = Date.now(); }
     if (!checkq.items.length && checkq.running) {
       checkq.running = false;
       if (checkq.taskId) { try { await qlPut('/open/crons/disable', [checkq.taskId]); } catch {} }   // 收尾回禁用

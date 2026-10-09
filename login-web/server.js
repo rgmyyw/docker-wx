@@ -7,6 +7,7 @@
  * 短信:  POST /sms/apply|again|verify /sms/forget;GET /sms/creds
  * 设备验证: POST /sms/qrapply
  * 兼容层: POST /wx/code {appid, openid→alias} /wx/refresh(smallcat 协议)
+ * 一键检测: POST /registry/scan/start {pauseCrons,dryRun} /cancel /progress /done;GET /status(注册矩阵页)
  */
 const http = require('http');
 const fs = require('fs');
@@ -272,6 +273,133 @@ setInterval(heartbeatAll, 2 * 60_000);
 const REG_PATH = '/data/registry.json';
 function loadReg() { try { return JSON.parse(fs.readFileSync(REG_PATH, 'utf8')); } catch { return { updated: '', scripts: {} }; } }
 function saveReg(r) { try { fs.writeFileSync(REG_PATH, JSON.stringify(r, null, 2)); } catch {} }
+
+/* ---------------- 注册状态一键检测 ----------------
+   矩阵页「一键检测」:经青龙 Open API 触发常驻任务「注册状态全量检测」
+   (schedule=0 0 31 2 * 永不自动调度,引擎 /ql/data/config/registry-scan-now.py)。
+   引擎串行实测全部 wxapp 脚本,逐脚本 POST /registry/scan/progress(兼心跳);
+   完成时 POST /registry/report 写矩阵 + POST /registry/scan/done 收尾。
+   本侧职责:暂停/恢复 wxapp 定时任务(防取码限频互扰)、心跳失联守卫(30min)、
+   完成/失败通知、服务重启后的中断恢复。 */
+const QL = {
+  base: process.env.QL_URL || 'http://qinglong:5700',
+  id: process.env.QL_CLIENT_ID || '', secret: process.env.QL_CLIENT_SECRET || '',
+  token: '', tokenExp: 0,
+};
+const SCAN_PATH = '/data/scan-state.json';
+/* schedule=闰日(下次 2028-02-29):青龙校验器拒"2月31日"式永不匹配表达;
+   任务平时保持禁用态,run 前临时 enable,收尾再 disable —— 双保险防自动调度 */
+const SCAN_TASK = { name: '注册状态全量检测', command: 'python3 /ql/data/config/registry-scan-now.py', schedule: '0 0 29 2 *' };
+const SCAN_BEAT_MS = 30 * 60_000;   // 进度心跳超时 → 判失联
+let scan = { phase: 'idle', msg: '', startedAt: '', endedAt: '', lastBeat: 0, pausedIds: [], qlTaskId: 0, progress: {}, events: [] };
+function loadScan() { try { scan = { ...scan, ...JSON.parse(fs.readFileSync(SCAN_PATH, 'utf8')) }; } catch {} }
+function saveScan() { try { fs.writeFileSync(SCAN_PATH, JSON.stringify(scan)); } catch (e) { log('error', `写 scan-state 失败: ${e.message}`); } }
+function scanEvent(msg) { scan.events.push({ t: fmtLocal(new Date()), msg }); if (scan.events.length > 60) scan.events.shift(); }
+
+async function ql(path, opt = {}, retry = true) {
+  if (!QL.id || !QL.secret) throw new Error('未配置青龙 API 凭据(QL_CLIENT_ID/QL_CLIENT_SECRET)');
+  if (Date.now() > QL.tokenExp) {
+    const r = await fetch(`${QL.base}/open/auth/token?client_id=${QL.id}&client_secret=${QL.secret}`);
+    const j = await r.json();
+    if (j.code !== 200 || !j.data || !j.data.token) throw new Error(`青龙认证失败: ${j.message || JSON.stringify(j).slice(0, 100)}`);
+    QL.token = j.data.token; QL.tokenExp = Date.now() + 20 * 60_000;
+  }
+  const r = await fetch(`${QL.base}${path}`, { ...opt, headers: { Authorization: `Bearer ${QL.token}`, 'Content-Type': 'application/json', ...(opt.headers || {}) } });
+  const t = await r.text();
+  let j; try { j = JSON.parse(t); } catch { throw new Error(`青龙 API ${path} 非 JSON 响应(${r.status})`); }
+  if (j.code === 401 && retry) { QL.tokenExp = 0; return ql(path, opt, false); }
+  if (j.code !== 200) {
+    const v = j.validation && JSON.stringify(j.validation).slice(0, 200);
+    throw new Error(`青龙 API ${path}: ${j.message || 'code ' + j.code}${v ? ' ' + v : ''}`);
+  }
+  return j.data;
+}
+const qlPut = (path, ids) => ql(path, { method: 'PUT', body: JSON.stringify(ids) });
+async function qlListCrons() { const d = await ql(`/open/crons?search_value=&t=${Date.now()}`); return (d && d.data) || []; }
+async function qlEnsureTask() {
+  const list = await qlListCrons();
+  const hit = list.find(c => c.name === SCAN_TASK.name && String(c.command).includes('registry-scan-now'));
+  let id;
+  if (hit) { id = hit.id; }
+  else {
+    const d = await ql('/open/crons', { method: 'POST', body: JSON.stringify(SCAN_TASK) });
+    id = d && (d.id || (d.data && d.data.id));
+    if (!id) throw new Error('创建检测任务失败: ' + JSON.stringify(d).slice(0, 120));
+    log('info', `已创建青龙检测任务「${SCAN_TASK.name}」 id=${id}`);
+  }
+  if (scan.qlTaskId !== id) { scan.qlTaskId = id; saveScan(); }
+  /* 平时保持禁用(防 schedule 意外触发);run 前由 scanStart 临时启用 */
+  if (!hit || hit.isDisabled === 0) await qlPut('/open/crons/disable', [id]).catch(e => log('warn', `检测任务置禁用失败(可忽略): ${e.message}`));
+  return id;
+}
+
+/* 收尾:翻状态 + 恢复定时任务 + 通知;恢复失败时钉钉/邮件强提醒(定时任务滞留禁用是事故) */
+async function scanFinish(phase, summary, silent) {
+  scan.phase = phase; scan.endedAt = new Date().toISOString(); scan.msg = summary || '';
+  saveScan();
+  let resumeErr = '';
+  if (scan.qlTaskId) { try { await qlPut('/open/crons/disable', [scan.qlTaskId]); } catch (e) { log('warn', `检测任务回禁用失败: ${e.message}`); } }
+  if (scan.pausedIds.length) {
+    const ids = scan.pausedIds;
+    try {
+      await qlPut('/open/crons/enable', ids);
+      scan.pausedIds = []; saveScan();
+      log('info', `一键检测收尾:已恢复 ${ids.length} 个 wxapp 定时任务`);
+    } catch (e) {
+      resumeErr = e.message;
+      log('error', `一键检测收尾:恢复定时任务失败,须手动到青龙启用!ids=${ids.join(',')}: ${e.message}`);
+    }
+  }
+  if (!silent) {
+    const txt = `${summary || phase}${resumeErr ? `\n\n⚠️ 定时任务恢复失败,请手动启用(id=${scan.pausedIds.join(',')})` : ''}\n时间: ${fmtLocal(new Date())}`;
+    const title = phase === 'done' ? '小程序一键检测完成' : phase === 'dead' ? '小程序一键检测失联(已恢复定时任务)' : '小程序一键检测失败';
+    try { await notify(title, txt); } catch (e) { log('error', `检测通知失败: ${e.message}`); }
+  }
+}
+
+async function scanStart(pauseCrons, dryRun) {
+  if (scan.phase === 'starting' || scan.phase === 'running') return { ok: false, msg: `已有检测在进行(${scan.phase}),请等待完成或先取消` };
+  if (!accounts.some(a => !a.offline)) return { ok: false, msg: '无在线微信账号,检测必然全败;请先到首页恢复账号在线' };
+  scan = { ...scan, phase: 'starting', msg: '编排中', startedAt: new Date().toISOString(), endedAt: '', lastBeat: Date.now(), pausedIds: [], progress: {}, events: [] };
+  saveScan();
+  try {
+    const taskId = await qlEnsureTask();
+    if (pauseCrons) {
+      const list = await qlListCrons();
+      const targets = list.filter(c => c.isDisabled === 0 && /_main\/wxapp\//.test(String(c.command)) && c.id !== taskId);
+      if (targets.length) {
+        await qlPut('/open/crons/disable', targets.map(c => c.id));
+        scan.pausedIds = targets.map(c => c.id); saveScan();
+        scanEvent(`已暂停 ${targets.length} 个 wxapp 定时任务(防取码限频互扰)`);
+        log('info', `一键检测:暂停 ${targets.length} 个 wxapp 定时任务`);
+      }
+    }
+    if (dryRun) {
+      const n = scan.pausedIds.length;
+      await scanFinish('stopped', `编排演练完成(未触发检测引擎),已恢复 ${n} 个定时任务`, true);
+      return { ok: true, msg: `dry-run 编排链路 OK(暂停并恢复 ${n} 个任务)` };
+    }
+    await qlPut('/open/crons/enable', [taskId]);   // run 前临时启用(run 对禁用任务的可用性未证)
+    await qlPut('/open/crons/run', [taskId]);
+    scan.phase = 'running'; scan.lastBeat = Date.now(); saveScan();
+    scanEvent(`检测引擎已触发(青龙任务 ${taskId}),预计 1.5~2.5 小时,可离开页面`);
+    log('info', `一键检测:已触发青龙任务 ${taskId}(暂停 ${scan.pausedIds.length} 个定时任务)`);
+    return { ok: true, msg: '检测已启动' };
+  } catch (e) {
+    log('error', `一键检测启动失败: ${e.message}`);
+    await scanFinish('error', `启动失败: ${e.message}`, false).catch(() => {});
+    return { ok: false, msg: `启动失败: ${e.message}` };
+  }
+}
+
+/* 心跳守卫:running 且 30 分钟无进度 → 判失联(青龙任务被杀/容器异常),恢复定时任务并通知 */
+setInterval(() => {
+  if (scan.phase !== 'running' || !scan.lastBeat) return;
+  if (Date.now() - scan.lastBeat > SCAN_BEAT_MS) {
+    log('error', `一键检测心跳超时 ${Math.round((Date.now() - scan.lastBeat) / 60000)} 分钟,判定失联`);
+    scanFinish('dead', '检测进程失联(超 30 分钟无进度),已恢复定时任务;矩阵保持检测前数据', false).catch(() => {});
+  }
+}, 60_000);
 
 /* 一键检测:立即对所有账号心跳并返回结果 */
 async function checkNow() {
@@ -604,9 +732,14 @@ async function wxCodeCompat(body) {
 /* ---------------- 启动 ---------------- */
 setInterval(poll, 3000);
 (async () => {
-  log('info', `login-web v3(多账号) 启动 api=${API} 账号数=${info.accounts.length} 钉钉=${DING.webhook ? '有' : '无'} SMTP=${SMTP.user ? '有' : '无'}`);
+  log('info', `login-web v3(多账号) 启动 api=${API} 账号数=${info.accounts.length} 钉钉=${DING.webhook ? '有' : '无'} SMTP=${SMTP.user ? '有' : '无'} 青龙=${QL.id ? '有' : '无凭据'}`);
   initAccounts();
   if (accounts.length) { for (const a of accounts) { fetchProfile(a); heartbeat(a); } }
+  loadScan();
+  /* 上次运行遗留的进行中检测(服务重启打断):判中断并恢复定时任务,不留调度被禁的烂摊子 */
+  if (scan.phase === 'running' || scan.phase === 'starting') {
+    await scanFinish('dead', '登录台服务重启,检测中断;已恢复定时任务,矩阵保持检测前数据', false).catch(() => {});
+  }
   await newQR(true);
 })();
 
@@ -859,6 +992,16 @@ h1{font-size:19px;font-weight:600;flex:1}
 .hd .meta{color:var(--sub);font-size:12px;width:100%}
 button{background:#1f2530;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
 button.on{border-color:var(--acc);color:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.primary:hover{opacity:.88;color:#fff}
+button.small{padding:4px 9px;font-size:11px}
+.scanbar{border:1px solid var(--acc);background:rgba(79,142,247,.08);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.scanrow{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
+.scanrow .sp{flex:1}
+.scanprog{height:6px;background:#1f2530;border-radius:3px;overflow:hidden;margin:8px 0 6px}
+.scanfill{height:100%;width:0;background:var(--acc);border-radius:3px;transition:width .5s}
+.scaninfo{font-size:12px;color:var(--sub);line-height:1.9;word-break:break-all}
+.scaninfo .evt{color:var(--dim);font-size:11px}
 .tabs{display:flex;gap:8px;margin:10px 0}
 .stat{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-bottom:10px;flex-wrap:wrap}
 .stat b{color:var(--tx)}
@@ -883,6 +1026,8 @@ tr:hover td.l{background:#1b2029}
  .legend{font-size:11px;line-height:1.9;margin-bottom:6px}
  th,td{padding:5px 4px!important;font-size:12px}
  th{font-size:11px}
+ .scanbar{padding:8px}
+ .scaninfo{font-size:11px}
 }
 .ok{color:var(--ok)}.unreg{color:var(--warn)}.fail{color:var(--err)}.unknown{color:var(--dim)}
 .bar{display:inline-block;width:8px;height:8px;border-radius:4px;margin-right:6px}
@@ -898,8 +1043,14 @@ tr:hover td.l{background:#1b2029}
 <button id="filterAll" class="on" onclick="setF('all')">全部</button>
 <button id="filterUnreg" onclick="setF('unreg')">未注册</button>
 <button id="filterSpec" onclick="setF('spec')">需处理</button>
+<button class="primary" id="scanBtn" onclick="scanStart()">🔍 一键检测</button>
 <button onclick="location.href=&apos;/&apos;">返回</button>
 <div class="meta" id="meta"></div>
+</div>
+<div class="scanbar" id="scanbar" style="display:none">
+<div class="scanrow"><b id="scanTitle">一键检测中…</b><span class="sp"></span><button class="small" onclick="scanCancel()">取消</button></div>
+<div class="scanprog"><div class="scanfill" id="scanFill"></div></div>
+<div class="scaninfo" id="scanInfo"></div>
 </div>
 <div class="tabs">
 <button class="on" id="tab-m" onclick="setTab('m')">按小程序</button>
@@ -927,7 +1078,7 @@ function render(){
  const scripts=Object.entries(data.scripts||{});
  const aliases=[...new Set(scripts.flatMap(([,v])=>Object.keys(v.per||{})))].sort();
  const disp=a=>{const m=(data.aliases||{})[a];if(!m)return a;return m.mobile?m.mobile.slice(0,3)+'****'+m.mobile.slice(-4):(m.wx||m.nick||a);};
- document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 来自每日任务执行日志(20:05 采集)';
+ document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 每日 20:05 自动采集;「🔍 一键检测」可即时全量实测';
  let rows=scripts.filter(([k,v])=>{
    if(filter==='unreg')return Object.values(v.per||{}).some(x=>x==='unreg');
    if(filter==='spec')return !!(NEED_HAR[k]||NEED_PHONE[k]);
@@ -964,7 +1115,46 @@ async function tick(){
  try{data=await(await fetch('/registry')).json();render();}catch(e){}
  setTimeout(tick,30000);
 }
-tick();
+/* ---- 一键检测 ---- */
+let scanBusy=false,scanDoneShown=false;
+function fmtStats(s){s=s||{};return '✅'+(s.ok||0)+' ❌'+(s.unreg||0)+' ⚠️'+(s.fail||0)+' ➖'+(s.unknown||0);}
+function scanBtnState(){return document.getElementById('scanBtn');}
+async function scanStart(){
+ if(scanBusy)return;scanBusy=true;
+ if(!confirm('对全部小程序脚本做一次真实检测?\\n将串行运行全部脚本(约 1.5~2.5 小时),期间自动暂停 wxapp 定时任务、结束后自动恢复;进度实时显示,可中途取消。')){scanBusy=false;return;}
+ try{
+  const r=await(await fetch('/registry/scan/start',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"pauseCrons":true}'})).json();
+  if(!r.ok)toast(r.msg||'启动失败');else toast('检测已启动');
+ }catch(e){toast('请求失败');}
+ scanBusy=false;
+}
+async function scanCancel(){
+ if(!confirm('取消当前检测?矩阵保持检测前数据,定时任务将自动恢复。'))return;
+ try{const r=await(await fetch('/registry/scan/cancel',{method:'POST'})).json();toast(r.msg||'已处理');}catch(e){toast('请求失败');}
+}
+async function scanTick(){
+ try{
+  const s=await(await fetch('/registry/scan/status')).json();
+  const on=(s.phase==='running'||s.phase==='starting');
+  const btn=scanBtnState();if(btn)btn.style.display=on?'none':'';
+  const bar=document.getElementById('scanbar');
+  if(on){
+   bar.style.display='block';
+   const p=s.progress||{},done=p.done||0,total=p.total||0;
+   document.getElementById('scanFill').style.width=total?Math.max(2,Math.round(done*100/total))+'%':'2%';
+   document.getElementById('scanTitle').textContent='🔍 一键检测中 '+done+'/'+total+(p.current?' · '+p.current:'')+(s.phase==='starting'?'(编排中…)':'');
+   const st=(p.stats&&Object.keys(p.stats).length)?('已完成 '+fmtStats(p.stats)):'准备中…';
+   const ev=(s.events||[]).slice(-3).map(e=>'<div class="evt">'+e.t.slice(11)+' '+e.msg+'</div>').join('');
+   document.getElementById('scanInfo').innerHTML=st+(ev?'<div style="margin-top:4px">'+ev+'</div>':'');
+   scanDoneShown=false;
+  }else{
+   if(bar.style.display!=='none'&&s.phase==='done'&&!scanDoneShown){scanDoneShown=true;toast('✅ 检测完成,矩阵已更新');tick();}
+   bar.style.display='none';
+  }
+ }catch(e){}
+ setTimeout(scanTick,5000);
+}
+tick();scanTick();
 </script></body></html>`;
 
 http.createServer(async (req, res) => {
@@ -1041,12 +1231,15 @@ http.createServer(async (req, res) => {
     const b = await body();
     const reg = loadReg();
     reg.updated = new Date().toISOString();
-    for (const item of (Array.isArray(b) ? b : [])) {
+    /* 裸数组=每日采集/全量检测(整体替换);{merge,items}=演练等部分场景(仅合并上报的脚本) */
+    const items = Array.isArray(b) ? b : (b && Array.isArray(b.items) ? b.items : []);
+    for (const item of items) {
       if (!item || !item.script) continue;
-      reg.scripts[item.script] = { name: item.name || item.script, per: item.per || {}, ts: new Date().toISOString() };
+      const old = reg.scripts[item.script] || {};
+      reg.scripts[item.script] = { name: item.name || old.name || item.script, per: item.per || {}, ts: new Date().toISOString() };
     }
     saveReg(reg);
-    log('info', `注册状态上报:${(Array.isArray(b) ? b : []).length} 个脚本`);
+    log('info', `注册状态上报:${items.length} 个脚本${b && b.merge ? '(合并)' : ''}`);
     json(200, { ok: true });
   } else if (req.method === 'GET' && url.pathname === '/registry') {
     const reg = loadReg();
@@ -1055,6 +1248,45 @@ http.createServer(async (req, res) => {
     json(200, { ...reg, aliases: amap });
   } else if (req.method === 'GET' && url.pathname === '/registrypage') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(REG_PAGE);
+  } else if (req.method === 'POST' && url.pathname === '/registry/scan/start') {
+    const b = await body();
+    json(200, await scanStart(b.pauseCrons !== false, !!b.dryRun));
+  } else if (req.method === 'GET' && url.pathname === '/registry/scan/status') {
+    json(200, { ...scan, beatTimeoutMs: SCAN_BEAT_MS });
+  } else if (req.method === 'POST' && url.pathname === '/registry/scan/progress') {
+    const b = await body();
+    if (scan.phase !== 'starting' && scan.phase !== 'running') {
+      /* 无编排会话(如手工 docker exec 演练):仅 start 事件可提升为会话,其余忽略 */
+      if (b.type !== 'start') { json(200, { ok: false, msg: '当前无检测会话,忽略进度' }); return; }
+      scan.phase = 'running'; scan.startedAt = new Date().toISOString(); scan.endedAt = ''; scan.msg = ''; scan.pausedIds = [];
+      scanEvent('检测引擎直接启动(无编排,未暂停定时任务)');
+      log('warn', '一键检测:引擎在无编排会话时启动(手工触发?)');
+    }
+    scan.lastBeat = Date.now();
+    if (b.type === 'start') {
+      scan.progress = { done: 0, total: b.total || 0, current: '', stats: {} };
+      scanEvent(`引擎启动:共 ${b.total} 个脚本`);
+    } else if (b.type === 'step') {
+      scan.progress = { done: b.done || 0, total: b.total || 0, current: b.current || '', stats: b.stats || {} };
+      if (b.msg) scanEvent(`${b.done}/${b.total} ${b.current || ''}: ${b.msg}`);
+    } else if (b.msg) scanEvent(b.msg);
+    saveScan();
+    json(200, { ok: true });
+  } else if (req.method === 'POST' && url.pathname === '/registry/scan/done') {
+    const b = await body();
+    if (scan.phase !== 'running' && scan.phase !== 'starting') { json(200, { ok: false, msg: '无进行中的检测,忽略' }); return; }
+    const s = b.stats || {};
+    const mins = scan.startedAt ? Math.round((Date.now() - new Date(scan.startedAt).getTime()) / 60000) : 0;
+    const summary = b.ok
+      ? `完成:${s.total || '?'} 个脚本 · ✅${s.ok || 0} ❌${s.unreg || 0} ⚠️${s.fail || 0} ➖${s.unknown || 0} · 耗时 ${mins} 分钟${b.limit ? `(演练 limit=${b.limit})` : ''}`
+      : `失败: ${b.error || '未知原因'}`;
+    await scanFinish(b.ok ? 'done' : 'error', summary, !!b.silent);
+    json(200, { ok: true });
+  } else if (req.method === 'POST' && url.pathname === '/registry/scan/cancel') {
+    if (scan.phase !== 'running' && scan.phase !== 'starting') { json(200, { ok: false, msg: '无进行中的检测' }); return; }
+    try { if (scan.qlTaskId) await qlPut('/open/crons/stop', [scan.qlTaskId]); } catch (e) { log('warn', `停止检测任务失败: ${e.message}`); }
+    await scanFinish('stopped', '已手动取消;矩阵保持检测前数据', true);
+    json(200, { ok: true, msg: '已取消并恢复定时任务' });
   } else if (req.method === 'POST' && url.pathname === '/checknow') {
     json(200, await checkNow());
   } else if (req.method === 'POST' && url.pathname === '/test-notify') {

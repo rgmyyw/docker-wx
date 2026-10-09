@@ -49,6 +49,9 @@ services:
     environment:
       - wxapi_url=http://wxapi:8057
       - port=8058
+      - QL_URL=http://qinglong:5700
+      - QL_CLIENT_ID=RXeP_g0CToA8
+      - QL_CLIENT_SECRET=o6F7xjg-869fP9nBnRhvPNn-
     ports:
       - "8058:8058"
     volumes:

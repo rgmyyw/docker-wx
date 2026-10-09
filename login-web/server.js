@@ -1034,9 +1034,12 @@ tr:hover td.l{background:#1c2331}
 </style></head><body><div class="wrap">
 <div class="hd">
 <h1>小程序注册状态矩阵</h1>
-<button id="filterAll" class="on" onclick="setF('all')">全部</button>
-<button id="filterUnreg" onclick="setF('unreg')">未注册</button>
-<button id="filterSpec" onclick="setF('spec')">需处理</button>
+<button id="filter-all" class="on" onclick="setF('all')">全部</button>
+<button id="filter-allok" onclick="setF('allok')">已注册</button>
+<button id="filter-unreg" onclick="setF('unreg')">未注册</button>
+<button id="filter-fail" onclick="setF('fail')">有失败</button>
+<button id="filter-nodata" onclick="setF('nodata')">无数据</button>
+<button id="filter-spec" onclick="setF('spec')">需处理</button>
 <button class="primary" id="scanBtn" onclick="fullScan()">🔍 一键检测</button>
 <button onclick="location.href=&apos;/&apos;">返回</button>
 <div class="meta" id="meta"></div>
@@ -1064,9 +1067,16 @@ const NEED_HAR={fuyouhui:'需抓包:填 fuyouhui_token',hisense_aijia:'需抓包
 const NEED_PHONE={};
 const NEED_REG={BREO:'需注册:登录回registered=true但uid为空(账号未建),须小程序内手机号快捷登录注册一次;其GET /login/register端点存在但各参数形状均500,无反编译包不可自动化',aiguo:'需注册:手机微信打开小程序完成注册/授权一次',aima:'需注册:爱玛会员俱乐部登录报110502用户不存在,需小程序内注册会员一次',dfmfs:'需注册:手机号授权登录已通,但业务要求扫产品顶部红包码激活/延长日常活动有效期后才能签到',musi:'需注册:登录/取token均通,但无会员档案(resMemberInfo空→memberId缺失,签到报会员id不能为空),须小程序内手机号授权注册会员一次',ardywj:'需注册:爱康需完成手机号授权/注册(小程序内)',bydhy:'需注册:手机微信打开小程序完成注册/授权一次',dfrc:'需注册:手机微信打开小程序完成注册/授权一次',dsmmhy:'需注册:袋鼠妈妈有赞平台需注册会员',fmy:'需注册:手机微信打开小程序完成注册/授权一次',hougongfang:'需注册:手机微信打开小程序完成注册/授权一次',hxek:'需注册:小程序=鸿星尔克官方会员中心(appid wxa1f1fa3785a47c7d,demogic会员中台);登录取不到memberId=未注册会员,须小程序内注册一次',junpinhui:'需注册:手机微信打开小程序完成注册/授权一次',lmf:'需注册:手机微信打开小程序完成注册/授权一次',lthwy:'需注册:手机微信打开小程序完成注册/授权一次',mdhy:'需注册:美的M-VIP需注册会员',mobil:'需注册:美孚臻享俱乐部需注册会员',mtyl:'需注册:手机微信打开小程序完成注册/授权一次',nndj:'需注册:牛牛短剧需注册',nxdc:'需注册:奈雪需注册会员',olecs:'需注册:Ole需注册会员',parkson:'需注册:百盛呼啦圈需注册会员',qmsd:'需注册:全棉时代需注册会员',qqhyjlb:'需注册:洽洽会员俱乐部需注册会员',quanmianshidai:'需注册:手机微信打开小程序完成注册/授权一次',quncrm:'需注册:群脉平台需注册会员',qyqd:'需注册:手机微信打开小程序完成注册/授权一次',rio:'需注册:RIO微醺俱乐部需注册会员',rrk:'需注册:手机微信打开小程序完成注册/授权一次',sf:'需注册:顺丰需注册/绑定会员',shanyi:'需注册:手机微信打开小程序完成注册/授权一次',smgc:'需注册:SM广场需注册会员(多城市)',tjg:'需注册:手机微信打开小程序完成注册/授权一次',trsj:'需注册:甜润世界需注册会员',txq:'需注册:汤星球需注册会员',wanjiale:'需注册:万家乐需注册会员',wuyingyundiannao:'需注册:无影云电脑静默登录可能被安全验证拦,被拦时需手填 wuying_token',wx_xlxyh:'需注册:骁龙骁友会需注册',wzy:'需注册:喂自由需注册',xiaodangjia:'需注册:小铛家需注册',xinxianghui:'需注册:手机微信打开小程序完成注册/授权一次',xmsq:'需注册:小米社区需绑定账号',xzyy:'需注册:小紫有约需注册',yjlxh:'需注册:伊家乐享会(伊利)需注册会员',youzan:'需注册:有赞店铺(临水玉泉/TOI/七点五等)需注册会员',wugenvboshi:'需注册:有赞店铺,登录通但签到报用户手机号未授权,须小程序内手机号授权注册一次(有赞绑定端点为私有接口,服务端无法代办)',yuexihui:'需注册:中粮悦喜荟需注册会员',yzyj:'需注册:微盟onecrm需注册会员',jdcode:'需注册:非签到,采集京东JD_COOKIE;需在京东小程序内绑定京东账号',juziyingtao:'需注册:橘子樱桃需在小程序内完成手机号授权(业务层)',sinsin:'需注册:sinsin需在小程序内完成手机号授权(业务层)',maopu:'需注册:猫扑不代填资料/不代过手机号授权,需小程序内完成'};
 function badge(k){const t=NEED_HAR[k]||NEED_PHONE[k]||NEED_REG[k];if(!t)return '';return ' <span class="bdg" title="'+t+'">'+(NEED_HAR[k]?'📡':NEED_PHONE[k]?'📲':'📱')+'</span>';}
-let tab='m', filter='all', data=null;
-function setF(f){filter=f;document.getElementById('filterAll').className=f==='all'?'on':'';document.getElementById('filterUnreg').className=f==='unreg'?'on':'';document.getElementById('filterSpec').className=f==='spec'?'on':'';render();}
+let tab='m', filter='all', data=null, sortMode='default';
+const FILTER_IDS=['all','allok','unreg','fail','nodata','spec'];
+function setF(f){filter=f;FILTER_IDS.forEach(x=>{const b=document.getElementById('filter-'+x);if(b)b.className=x===f?'on':'';});render();}
 function setTab(t){tab=t;document.getElementById('tab-m').className=t==='m'?'on':'';document.getElementById('tab-a').className=t==='a'?'on':'';render();}
+/* 名称排序三态循环:默认(未注册优先)→ 名称↑ → 名称↓ */
+function toggleSort(){
+ sortMode=sortMode==='default'?'nameAsc':(sortMode==='nameAsc'?'nameDesc':'default');
+ render();
+}
+function sortArrow(){return sortMode==='nameAsc'?'↑':(sortMode==='nameDesc'?'↓':'↕');}
 const ICON={ok:'<span class="c ok" title="已注册">✓</span>',unreg:'<span class="c unreg" title="未注册(需手机授权)">✕</span>',fail:'<span class="c fail" title="其他失败">!</span>',unknown:'<span class="c unknown" title="无数据">–</span>'};
 function fmtPer(p){return p?ICON[p]||ICON.unknown:ICON.unknown;}
 function render(){
@@ -1076,11 +1086,18 @@ function render(){
  const disp=a=>{const m=(data.aliases||{})[a];if(!m)return a;return m.mobile?m.mobile.slice(0,3)+'****'+m.mobile.slice(-4):(m.wx||m.nick||a);};
  document.getElementById('meta').textContent='数据更新: '+(data.updated?new Date(data.updated).toLocaleString():'无')+' · 「🔍 一键检测」=重读执行日志;行内 🔍=立即实测该脚本(弹窗看实时日志)';
  let rows=scripts.filter(([k,v])=>{
-   if(filter==='unreg')return Object.values(v.per||{}).some(x=>x==='unreg');
+   const vs=Object.values(v.per||{});
+   if(filter==='unreg')return vs.some(x=>x==='unreg');
+   if(filter==='allok')return vs.length>0&&vs.every(x=>x==='ok');
+   if(filter==='fail')return vs.some(x=>x==='fail');
+   if(filter==='nodata')return vs.length===0;
    if(filter==='spec')return !!(NEED_HAR[k]||NEED_PHONE[k]);
    return true;
  });
- rows.sort((a,b)=>{const ua=Object.values(a[1].per||{}).filter(x=>x==='unreg').length,ub=Object.values(b[1].per||{}).filter(x=>x==='unreg').length;return ub-ua||a[1].name.localeCompare(b[1].name);});
+ const nm=x=>String((x[1]&&x[1].name)||x[0]);
+ if(sortMode==='nameAsc')rows.sort((a,b)=>nm(a).localeCompare(nm(b),'zh'));
+ else if(sortMode==='nameDesc')rows.sort((a,b)=>nm(b).localeCompare(nm(a),'zh'));
+ else rows.sort((a,b)=>{const ua=Object.values(a[1].per||{}).filter(x=>x==='unreg').length,ub=Object.values(b[1].per||{}).filter(x=>x==='unreg').length;return ub-ua||nm(a).localeCompare(nm(b));});
  let ok=0,un=0,fl=0;
  scripts.forEach(([k,v])=>Object.values(v.per||{}).forEach(x=>{if(x==='ok')ok++;else if(x==='unreg')un++;else if(x==='fail')fl++;}));
  const q=(typeof checkState!=='undefined'&&checkState)?checkState.queue:[];
@@ -1088,7 +1105,7 @@ function render(){
  document.getElementById('legend').innerHTML='<span>'+ICON.ok+' 已注册</span><span>'+ICON.unreg+' 未注册</span><span>'+ICON.fail+' 其他失败</span><span>'+ICON.unknown+' 无数据</span><span style="opacity:.7">|</span><span>类型: <span class="bdg" title="需手动抓包获取token填变量,悬停各行徽章看具体变量">📡 需抓包 '+Object.keys(NEED_HAR).length+'</span> · <span class="bdg" title="登录依赖手机号授权,协议层不支持,须手机微信内操作一次">📲 需手机授权 '+Object.keys(NEED_PHONE).length+'</span> · <span class="bdg" title="手机微信打开该小程序,完成注册/授权一次后脚本才有产出">📱 需注册 '+Object.keys(NEED_REG).length+'</span> · 无标记=打开即用</span>';
  if(tab==='m'){
    const short = window.matchMedia('(max-width:640px)').matches;
-   let h='<table><tr><th style="text-align:left">小程序</th>'+aliases.map(a=>'<th title="'+disp(a)+'">'+(short && (data.aliases||{})[a] && (data.aliases||{})[a].mobile ? (data.aliases||{})[a].mobile.slice(-4) : disp(a))+'</th>').join('')+'</tr>';
+   let h='<table><tr><th id="thName" style="text-align:left;cursor:pointer;user-select:none" title="点击切换排序:默认未注册优先 → 名称升 → 名称降" onclick="toggleSort()">小程序 '+sortArrow()+'</th>'+aliases.map(a=>'<th title="'+disp(a)+'">'+(short && (data.aliases||{})[a] && (data.aliases||{})[a].mobile ? (data.aliases||{})[a].mobile.slice(-4) : disp(a))+'</th>').join('')+'</tr>';
    for(const [k,v] of rows){
      const qp=q.findIndex(x=>x.script===k);
      const chk=qp===0?' ⏳':(qp>0?' <span style="font-size:10px;color:var(--dim)">⏱'+qp+'</span>':'');

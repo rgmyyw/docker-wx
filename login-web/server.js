@@ -6,7 +6,7 @@
  * 操作:  POST /newqr /logout {alias} /relogin {alias} /test-notify /channel {ch}
  * 短信:  POST /sms/apply|again|verify /sms/forget;GET /sms/creds
  * 设备验证: POST /sms/qrapply
- * 兼容层: POST /wx/code {appid, openid→alias} /wx/refresh /wx/qrcodeauth {openid, uuid}(smallcat 协议)
+ * 兼容层: POST /wx/code {appid, openid→alias} /wx/refresh(smallcat 协议)
  * 注册矩阵: POST /registry/scan/start(一键读日志) /progress(采集器进度上报) /check-one {script}(行内单脚本实测)
  *           GET /registry/scan/status /registry/check/status /check-next(checker 拉取) POST /check-done
  */
@@ -711,43 +711,6 @@ async function wxCodeCompat(body) {
   return { status: false, message: `取码失败: ${lastMsg}` };
 }
 
-/* ---------------- /wx/qrcodeauth 扫码授权 ----------------
-   第三方网站微信扫码登录(qqpcmgr 等):脚本自取 QRConnect uuid 后,由协议侧
-   以已登录账号代扫+确认(open.weixin.qq.com/connect/confirm → confirm_reply),
-   再轮询 long.open.weixin.qq.com 拿授权 code。走 wxapi QrcodeAuthLogin
-   (GetA8Key OpCode=2/Scene=4/CodeType=19),响应 Data={wx_errcode,wx_code};
-   wx_code 为空多为首次轮询尚在过渡,短间隔重试(脚本 HTTP 超时 30s)。 */
-async function wxQrcodeAuthCompat(body) {
-  const uuid = body && (body.uuid || body.Uuid);
-  if (!uuid) return { status: false, message: '缺少 uuid' };
-  const key = body.openid ? String(body.openid).split('#')[0].trim() : '';
-  let acc;
-  if (key) {
-    acc = accounts.find(a => a.alias === key || a.wxid === key);
-    if (!acc) return { status: false, message: `标识 ${key} 未登录(现有标识:${accounts.map(a => a.alias).join(',') || '无'})` };
-  } else acc = accounts[0];
-  if (!acc) return { status: false, message: '无已登录微信,请先在登录台扫码' };
-  let lastMsg = '';
-  for (let i = 0; i < 3; i++) {
-    if (i) await sleep(2500);
-    try {
-      const res = await api('/api/Wxapp/QrcodeAuthLogin', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Wxid: acc.wxid, Uuid: uuid }),
-      });
-      if (!res.Success) return { status: false, message: `QrcodeAuthLogin 失败: ${res.Message}` };
-      const d = res.Data || {};
-      if (d.wx_code) {
-        log('info', `[${acc.alias}] 扫码授权成功(第${i + 1}次轮询) uuid=${String(uuid).slice(0, 8)}…`);
-        return { status: true, code: d.wx_code, wxCode: d.wx_code, data: { code: d.wx_code, wxCode: d.wx_code, wx_errcode: d.wx_errcode } };
-      }
-      lastMsg = `wx_errcode=${d.wx_errcode}`;
-      log('warn', `[${acc.alias}] 扫码授权空code(轮询${i + 1}/3): ${lastMsg}`);
-    } catch (e) { lastMsg = e && e.message; log('error', `[${acc.alias}] 扫码授权异常(轮询${i + 1}/3): ${lastMsg}`); }
-  }
-  return { status: false, message: `扫码授权未拿到 code(${lastMsg})` };
-}
-
 /* ---------------- 启动 ---------------- */
 setInterval(poll, 3000);
 (async () => {
@@ -1327,8 +1290,6 @@ http.createServer(async (req, res) => {
     json(200, { ok: true, msg: `已切换 ${ch} 并取新码` });
   } else if (req.method === 'POST' && url.pathname === '/wx/code') {
     json(200, await wxCodeCompat(await body()));
-  } else if (req.method === 'POST' && url.pathname === '/wx/qrcodeauth') {
-    json(200, await wxQrcodeAuthCompat(await body()));
   } else if (req.method === 'POST' && url.pathname === '/wx/refresh') {
     json(200, { status: true });
   } else if (req.method === 'POST' && url.pathname === '/wx/getuserinfo') {
